@@ -1075,7 +1075,7 @@ print(json.dumps(res))
   }
 });
 
-const DEFAULT_LIVE_RTSP_STREAM = "rtsp://rtsp.rtsplink.com/live/people?token=d37fb79892a53ccf13a8cd1eb108f3c163252d5e538a6864196d982de4b85a71";
+const DEFAULT_LIVE_RTSP_STREAM = "rtsp://9627b0bf2a7b.entrypoint.cloud.wowza.com:1935/app-p5260J38/66abe4b9_stream1";
 let latestLiveSnapshot: Buffer | null = null;
 let latestSnapshotTime = 0;
 
@@ -1220,13 +1220,24 @@ app.get("/api/stream/info", (req, res) => {
     fps: 30,
     codec: "H.264 High Profile",
     audio_codec: "AAC-LC 44.1kHz",
-    provider: "rtsplink.com (Live Feed)",
+    provider: "Wowza Streaming Cloud (Live RTSP)",
     is_simulator: false,
     active: true,
   });
 });
 
-// 11h. Camera Live Snapshot Endpoint (Real JPEG extracted from live RTSP feed)
+// 11h. Windows 11 Stream Playlist (.m3u) Download Endpoint (Opens in Windows Media Player / VLC)
+app.get(["/api/cameras/:ip/playlist.m3u", "/api/stream/playlist.m3u"], (req, res) => {
+  const targetUrl = (req.query.url as string) || DEFAULT_LIVE_RTSP_STREAM;
+  const ip = req.params.ip || "camera";
+  const m3uContent = `#EXTM3U\r\n#EXTINF:-1 tvg-id="${ip}" tvg-name="NetSentinel-${ip}",NetSentinel Live RTSP Camera (${ip})\r\n${targetUrl}\r\n`;
+
+  res.setHeader("Content-Type", "application/x-mpegurl");
+  res.setHeader("Content-Disposition", `attachment; filename="netsentinel_stream_${ip.replace(/\./g, "-")}.m3u"`);
+  res.send(m3uContent);
+});
+
+// 11i. Camera Live Snapshot Endpoint (Real JPEG extracted from live RTSP feed)
 app.get(["/api/cameras/:ip/snapshot", "/api/stream/snapshot"], async (req, res) => {
   const targetUrl = (req.query.url as string) || DEFAULT_LIVE_RTSP_STREAM;
 
@@ -1289,7 +1300,7 @@ app.get(["/api/cameras/:ip/snapshot", "/api/stream/snapshot"], async (req, res) 
       <circle cx="58" cy="47" r="6" fill="#ef4444" />
       <text x="74" y="52" fill="#ef4444" font-family="monospace" font-size="14" font-weight="bold">LIVE RTSP STREAM</text>
       <rect x="40" y="650" width="460" height="36" rx="6" fill="rgba(15, 23, 42, 0.85)" stroke="rgba(51, 65, 85, 0.8)" />
-      <text x="55" y="674" fill="#38bdf8" font-family="monospace" font-size="14" font-weight="bold">FEED: rtsp.rtsplink.com · ${timeStr}</text>
+      <text x="55" y="674" fill="#38bdf8" font-family="monospace" font-size="14" font-weight="bold">FEED: Wowza Cloud Entrypoint · ${timeStr}</text>
     </svg>`;
     res.setHeader("Content-Type", "image/svg+xml");
     res.setHeader("Cache-Control", "no-cache");
@@ -1297,7 +1308,7 @@ app.get(["/api/cameras/:ip/snapshot", "/api/stream/snapshot"], async (req, res) 
   });
 });
 
-// 11i. IPv6 Discovery & Neighbor Diagnostics
+// 11j. IPv6 Discovery & Neighbor Diagnostics
 app.get("/api/discovery/ipv6", async (req, res) => {
   try {
     const output = await runPythonScript([
@@ -1320,6 +1331,57 @@ print(json.dumps({
     "ipv6_neighbors_detected": len(ipv6_map),
     "ipv6_mapping": ipv6_map,
     "stored_ipv6_devices": ipv6_devices,
+}))
+      `,
+    ]);
+    res.json(JSON.parse(output.trim()));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 11k. Active IPv6 Neighbor Discovery & Sweep
+app.post("/api/discovery/ipv6/sweep", async (req, res) => {
+  try {
+    const output = await runPythonScript([
+      "-c",
+      `
+import json
+from netsentinel.discovery import SubnetDiscoveryEngine
+from netsentinel.db import DatabaseEngine
+
+engine = SubnetDiscoveryEngine()
+ipv6_map = engine.scan_ipv6_neighbors()
+db = DatabaseEngine()
+devices = db.get_all_devices()
+updated_count = 0
+
+for d in devices:
+    mac = d.get("mac", "").upper()
+    existing_ipv6 = d.get("ipv6")
+    resolved_ipv6 = ipv6_map.get(mac) or engine.mac_to_ipv6(mac)
+    if resolved_ipv6 and resolved_ipv6 != existing_ipv6:
+        db.upsert_device(
+            mac=mac,
+            ip=d.get("ip", ""),
+            hostname=d.get("hostname", ""),
+            vendor=d.get("vendor", ""),
+            device_type=d.get("device_type", ""),
+            latency_ms=d.get("latency_ms", 1.0),
+            ipv6=resolved_ipv6
+        )
+        updated_count += 1
+
+all_devices = db.get_all_devices()
+ipv6_devices = [d for d in all_devices if d.get("ipv6")]
+
+print(json.dumps({
+    "success": True,
+    "active_interface": engine.active_interface,
+    "ipv6_neighbors_detected": len(ipv6_map),
+    "ipv6_devices_total": len(ipv6_devices),
+    "updated_count": updated_count,
+    "devices": ipv6_devices,
 }))
       `,
     ]);

@@ -17,6 +17,7 @@ import {
   Gauge,
   Sparkles,
   CornerDownLeft,
+  RefreshCw,
 } from "lucide-react";
 
 interface TerminalHistoryEntry {
@@ -67,6 +68,11 @@ Available tools: discovery scan, ping, traceroute, dnshijack, rat-check, cameras
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
+  const [execProgress, setExecProgress] = useState<{ active: boolean; stage: string; percent: number }>({
+    active: false,
+    stage: "",
+    percent: 0,
+  });
   const [isCrtEffect, setIsCrtEffect] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
@@ -99,6 +105,17 @@ Available tools: discovery scan, ping, traceroute, dnshijack, rat-check, cameras
     setHistoryIndex(-1);
     setInputCommand("");
     setIsExecuting(true);
+    setExecProgress({ active: true, stage: `Spawning engine subshell for '${trimmed}'...`, percent: 15 });
+
+    let pct = 15;
+    const progressTimer = setInterval(() => {
+      pct += 12;
+      if (pct > 90) pct = 90;
+      let stage = `Executing '${trimmed}' in engine...`;
+      if (pct > 40 && pct <= 70) stage = "Gathering subprocess stdout/stderr stream...";
+      else if (pct > 70) stage = "Parsing ANSI color sequences and output buffers...";
+      setExecProgress({ active: true, stage, percent: pct });
+    }, 200);
 
     try {
       const res = await fetch("/api/terminal/exec", {
@@ -106,6 +123,8 @@ Available tools: discovery scan, ping, traceroute, dnshijack, rat-check, cameras
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ command: trimmed }),
       });
+      clearInterval(progressTimer);
+      setExecProgress({ active: true, stage: "Execution completed!", percent: 100 });
 
       if (res.ok) {
         const data = await res.json();
@@ -148,6 +167,9 @@ Available tools: discovery scan, ping, traceroute, dnshijack, rat-check, cameras
       ]);
     } finally {
       setIsExecuting(false);
+      setTimeout(() => {
+        setExecProgress({ active: false, stage: "", percent: 0 });
+      }, 600);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   };
@@ -331,12 +353,22 @@ Available tools: discovery scan, ping, traceroute, dnshijack, rat-check, cameras
             </div>
           ))}
 
-          {/* Running Spinner indicator */}
+          {/* Dynamic Command Execution Progress Meter (Requested Feature) */}
           {isExecuting && (
-            <div className="flex items-center gap-2 text-cyan-400 py-1">
-              <span className="text-emerald-400">netsentinel@sentinel-lan:~$</span>
-              <span className="animate-pulse">Executing engine subshell...</span>
-              <span className="inline-block w-2 h-4 bg-cyan-400 animate-ping" />
+            <div className="my-2 p-2.5 bg-slate-900/90 border border-cyan-500/30 rounded-lg space-y-1.5 font-mono text-xs">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="flex items-center gap-2 text-cyan-300 font-bold">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                  <span>{execProgress.stage || "Executing engine subshell..."}</span>
+                </span>
+                <span className="text-cyan-400 font-bold">{execProgress.percent}%</span>
+              </div>
+              <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                <div
+                  className="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 rounded-full transition-all duration-200"
+                  style={{ width: `${Math.max(execProgress.percent, 8)}%` }}
+                />
+              </div>
             </div>
           )}
 

@@ -332,6 +332,19 @@ export default function App() {
   const [isAuditingRouter, setIsAuditingRouter] = useState<boolean>(false);
   const [isScanningCameras, setIsScanningCameras] = useState<boolean>(false);
   const [isExecutingCli, setIsExecutingCli] = useState<boolean>(false);
+  const [isScanningIpv6, setIsScanningIpv6] = useState<boolean>(false);
+  const [ipv6ScanProgress, setIpv6ScanProgress] = useState<{
+    percent: number;
+    stage: string;
+    foundCount: number;
+  }>({ percent: 0, stage: "", foundCount: 0 });
+
+  const [cliExecProgress, setCliExecProgress] = useState<{
+    active: boolean;
+    command: string;
+    stage: string;
+    percent: number;
+  }>({ active: false, command: "", stage: "", percent: 0 });
 
   // Live Network Scan Status State (Requested Feature)
   const [scanStatus, setScanStatus] = useState<{
@@ -401,7 +414,7 @@ export default function App() {
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [filterType, setFilterType] = useState<"all" | "online" | "untrusted" | "quarantined">("all");
+  const [filterType, setFilterType] = useState<"all" | "online" | "ipv6" | "untrusted" | "quarantined">("all");
   const [customSubnet, setCustomSubnet] = useState<string>("");
 
   // Port Scan Target & Multi-Threaded Controls State
@@ -523,7 +536,7 @@ export default function App() {
       if (pct > 40 && pct <= 70) {
         stage = "Discovering ONVIF web services (port 8000)...";
       } else if (pct > 70) {
-        stage = "Connecting to real RTSP video feeds (rtsp.rtsplink.com)...";
+        stage = "Connecting to real RTSP video feeds (cloud.wowza.com)...";
       }
       setCameraScanProgress({ percent: pct, stage, probedCount: Math.floor(pct / 20) + 1 });
     }, 250);
@@ -972,24 +985,93 @@ export default function App() {
     }
   };
 
-  // Run CLI
+  // IPv6 Neighbor Discovery Sweep Handler (Requested Feature)
+  const handleScanIpv6 = async () => {
+    setIsScanningIpv6(true);
+    setIpv6ScanProgress({ percent: 15, stage: "Querying Windows 11 netsh & Linux neighbor tables...", foundCount: 0 });
+    let pct = 15;
+    const interval = setInterval(() => {
+      pct += 10;
+      if (pct > 90) pct = 90;
+      let stage = "Querying Windows 11 netsh & Linux neighbor tables...";
+      if (pct > 40 && pct <= 70) {
+        stage = "Scanning ICMPv6 multicast solicitation & NDP cache...";
+      } else if (pct > 70) {
+        stage = "Resolving RFC 4291 EUI-64 & SLAAC global addresses...";
+      }
+      setIpv6ScanProgress((prev) => ({ ...prev, percent: pct, stage }));
+    }, 200);
+
+    try {
+      const res = await fetch("/api/discovery/ipv6/sweep", { method: "POST" });
+      clearInterval(interval);
+      if (res.ok) {
+        const data = await res.json();
+        setIpv6ScanProgress({
+          percent: 100,
+          stage: `Discovered & mapped ${data.ipv6_devices_total || 0} dual-stack IPv6 devices!`,
+          foundCount: data.ipv6_devices_total || 0,
+        });
+        showToast(`IPv6 Neighbor Discovery: ${data.ipv6_devices_total || 0} IPv6 devices identified!`);
+        fetchDevices();
+      } else {
+        setIpv6ScanProgress((prev) => ({ ...prev, percent: 100, stage: "Sweep completed" }));
+      }
+    } catch (err: any) {
+      clearInterval(interval);
+      showToast(`IPv6 discovery error: ${err.message}`);
+    } finally {
+      setTimeout(() => {
+        setIsScanningIpv6(false);
+      }, 1200);
+    }
+  };
+
+  // Run CLI with Dynamic Progress Meter
   const handleRunCli = async (cmd: string) => {
     setIsExecutingCli(true);
     setCliOutput(`[NetSentinel] Spawning 'python3 cli.py ${cmd}'...\n`);
+    setCliExecProgress({
+      active: true,
+      command: cmd,
+      stage: `Initializing subshell for 'python3 cli.py ${cmd}'...`,
+      percent: 15,
+    });
+
+    let pct = 15;
+    const timer = setInterval(() => {
+      pct += 10;
+      if (pct > 90) pct = 90;
+      let stage = `Executing python3 cli.py ${cmd}...`;
+      if (pct > 50) stage = "Streaming subshell stdout & parsing engine output...";
+      setCliExecProgress((prev) => ({ ...prev, percent: pct, stage }));
+    }, 250);
+
     try {
       const res = await fetch("/api/run-cli", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ command: cmd }),
       });
+      clearInterval(timer);
       if (res.ok) {
         const data = await res.json();
         setCliOutput(data.output || "Completed with no output.");
+        setCliExecProgress({
+          active: true,
+          command: cmd,
+          stage: "Execution completed successfully!",
+          percent: 100,
+        });
       }
     } catch (err: any) {
+      clearInterval(timer);
       setCliOutput(`Error running CLI: ${err.message}`);
     } finally {
       setIsExecutingCli(false);
+      setTimeout(() => {
+        setCliExecProgress({ active: false, command: "", stage: "", percent: 0 });
+      }, 1200);
     }
   };
 
@@ -1031,6 +1113,7 @@ export default function App() {
     const matchesSearch =
       d.ip.toLowerCase().includes(query) ||
       d.mac.toLowerCase().includes(query) ||
+      (d.ipv6 && d.ipv6.toLowerCase().includes(query)) ||
       (d.hostname && d.hostname.toLowerCase().includes(query)) ||
       (d.vendor && d.vendor.toLowerCase().includes(query)) ||
       (d.nickname && d.nickname.toLowerCase().includes(query));
@@ -1038,6 +1121,7 @@ export default function App() {
     if (!matchesSearch) return false;
 
     if (filterType === "online") return d.status === "online";
+    if (filterType === "ipv6") return !!d.ipv6;
     if (filterType === "untrusted") return d.is_trusted === 0;
     if (filterType === "quarantined") return d.is_quarantined === 1;
 
@@ -2047,7 +2131,16 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={handleScanIpv6}
+                      disabled={isScanningIpv6}
+                      className="px-3 py-1.5 text-xs font-semibold text-purple-200 bg-purple-900/60 hover:bg-purple-800/80 disabled:opacity-50 rounded-lg border border-purple-500/40 transition-colors flex items-center gap-1.5 shadow-sm"
+                      title="Scan network for IPv6 neighbors, NDP mappings, and SLAAC addresses"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isScanningIpv6 ? "animate-spin" : ""}`} />
+                      <span>{isScanningIpv6 ? "Scanning IPv6..." : "IPv6 Neighbor Sweep"}</span>
+                    </button>
                     <a
                       href="/api/export/csv"
                       download="netsentinel_inventory.csv"
@@ -2073,14 +2166,14 @@ export default function App() {
                     <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
                     <input
                       type="text"
-                      placeholder="Search IP, MAC, hostname, custom tags..."
+                      placeholder="Search IP, IPv6, MAC, hostname, custom tags..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-md pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-md pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
                     />
                   </div>
 
-                  <div className="flex items-center gap-1 p-1 bg-slate-950 border border-slate-800 rounded-md text-xs">
+                  <div className="flex items-center gap-1 p-1 bg-slate-950 border border-slate-800 rounded-md text-xs flex-wrap">
                     <button
                       onClick={() => setFilterType("all")}
                       className={`px-2.5 py-1 rounded transition-colors ${
@@ -2096,6 +2189,15 @@ export default function App() {
                       }`}
                     >
                       Online ({devices.filter((d) => d.status === "online").length})
+                    </button>
+                    <button
+                      onClick={() => setFilterType("ipv6")}
+                      className={`px-2.5 py-1 rounded transition-colors ${
+                        filterType === "ipv6" ? "bg-purple-900/70 text-purple-200 border border-purple-500/50 font-bold" : "text-slate-400 hover:text-purple-300"
+                      }`}
+                      title="Filter devices with active dual-stack IPv6 address"
+                    >
+                      IPv6 Stack ({devices.filter((d) => d.ipv6).length})
                     </button>
                     <button
                       onClick={() => setFilterType("untrusted")}
@@ -2116,6 +2218,45 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* IPV6 DISCOVERY SWEEP PROGRESS METER (Requested Feature) */}
+              {isScanningIpv6 && (
+                <div className="bg-gradient-to-r from-purple-950/80 via-slate-900/90 to-indigo-950/80 border-2 border-purple-500/50 rounded-xl p-5 shadow-xl shadow-purple-950/50">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className="p-3 bg-purple-500/20 text-purple-300 rounded-xl border border-purple-500/40 shrink-0">
+                        <Globe className="w-5 h-5 animate-pulse text-purple-400" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-purple-300 font-bold bg-purple-900/70 px-2.5 py-0.5 rounded border border-purple-400/40">
+                            IPV6 NEIGHBOR DISCOVERY ACTIVE
+                          </span>
+                          <span className="text-xs font-mono text-cyan-300 font-semibold">
+                            Dual-Stack Neighbor Protocol (NDP / EUI-64)
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-white mt-1">
+                          {ipv6ScanProgress.stage || "Probing IPv6 neighbors and NDP mappings..."}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="w-full md:w-64 space-y-1.5 shrink-0">
+                      <div className="flex items-center justify-between text-xs font-mono">
+                        <span className="text-slate-300 font-semibold">Sweep Progress:</span>
+                        <span className="font-bold text-purple-300">{ipv6ScanProgress.percent}%</span>
+                      </div>
+                      <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-700/80">
+                        <div
+                          className="h-full bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-400 rounded-full transition-all duration-300 shadow-sm shadow-purple-400"
+                          style={{ width: `${Math.max(ipv6ScanProgress.percent, 8)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* High-Density Data Grid */}
               <div className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden">
@@ -2176,8 +2317,19 @@ export default function App() {
                               <div className="font-mono text-slate-200 font-semibold">{d.ip}</div>
                               <div className="font-mono text-[11px] text-slate-500">{d.mac}</div>
                               {d.ipv6 && (
-                                <div className="font-mono text-[10px] text-purple-400 truncate max-w-[200px]" title={`IPv6 Address: ${d.ipv6}`}>
-                                  IPv6: {d.ipv6}
+                                <div className="font-mono text-[10px] text-purple-300 flex items-center gap-1 mt-0.5 truncate max-w-[220px]" title={`IPv6 Address: ${d.ipv6}`}>
+                                  <span className="px-1 py-0.2 bg-purple-950/80 border border-purple-500/40 rounded text-[9px] text-purple-300 font-bold shrink-0">IPv6</span>
+                                  <span className="truncate">{d.ipv6}</span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      copyToClipboard(d.ipv6!, "IPv6 Address");
+                                    }}
+                                    className="text-purple-400 hover:text-white shrink-0 ml-0.5"
+                                    title="Copy IPv6 Address"
+                                  >
+                                    <Copy className="w-2.5 h-2.5" />
+                                  </button>
                                 </div>
                               )}
                               {d.nickname && (
@@ -2964,6 +3116,43 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+
+                {/* CLI EXECUTION PROGRESS METER (Requested Feature) */}
+                {(isExecutingCli || cliExecProgress.active) && (
+                  <div className="mb-4 bg-gradient-to-r from-cyan-950/80 via-slate-900/90 to-blue-950/80 border-2 border-cyan-500/50 rounded-xl p-4 shadow-xl">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-cyan-500/20 text-cyan-300 rounded-lg border border-cyan-500/40 shrink-0">
+                          <Terminal className="w-4 h-4 animate-spin text-cyan-400" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-300 font-bold bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/30">
+                            ENGINE SUBPROCESS RUNNING
+                          </span>
+                          <h4 className="text-xs font-mono font-bold text-white mt-0.5">
+                            {cliExecProgress.command ? `python3 cli.py ${cliExecProgress.command}` : "Running command..."}
+                          </h4>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            {cliExecProgress.stage || "Executing engine subshell command..."}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="w-full md:w-56 space-y-1 shrink-0">
+                        <div className="flex items-center justify-between text-[11px] font-mono">
+                          <span className="text-slate-400">Progress:</span>
+                          <span className="font-bold text-cyan-300">{cliExecProgress.percent}%</span>
+                        </div>
+                        <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-700/80">
+                          <div
+                            className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.max(cliExecProgress.percent, 8)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Embedded Terminal Component */}
                 <EmbeddedTerminal

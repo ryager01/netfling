@@ -18,6 +18,8 @@ import {
   Play,
   Activity,
   Layers,
+  Monitor,
+  Download,
 } from "lucide-react";
 import { CameraItem, CameraManagementModal } from "./CameraManagementModal";
 import { SurveillanceStreamPlayer } from "./SurveillanceStreamPlayer";
@@ -229,7 +231,7 @@ export function CamerasDeckView({
             const hasPtz = cam.camera_defaults?.ptz_supported || cam.ptz_capabilities?.supported;
             const defUser = cam.camera_defaults?.default_username || "admin";
             const defPass = cam.camera_defaults?.default_password || "admin";
-            const rtspUri = "rtsp://rtsp.rtsplink.com/live/people?token=d37fb79892a53ccf13a8cd1eb108f3c163252d5e538a6864196d982de4b85a71";
+            const rtspUri = "rtsp://9627b0bf2a7b.entrypoint.cloud.wowza.com:1935/app-p5260J38/66abe4b9_stream1";
 
             return (
               <div
@@ -329,6 +331,17 @@ export function CamerasDeckView({
                       <Sliders className="w-3.5 h-3.5" />
                       <span>Open Camera Management</span>
                     </button>
+
+                    <a
+                      href={`/api/cameras/${cam.ip}/playlist.m3u?url=${encodeURIComponent(rtspUri)}`}
+                      download={`camera_${cam.ip.replace(/\./g, "-")}.m3u`}
+                      className="py-2 px-3 text-xs font-medium bg-blue-950/60 hover:bg-blue-900/60 text-blue-300 rounded-lg border border-blue-500/40 flex items-center gap-1.5 transition-colors"
+                      title="Download .M3U stream playlist to view camera directly on Windows 11 in Windows Media Player or VLC"
+                    >
+                      <Monitor className="w-3.5 h-3.5 text-blue-400" />
+                      <span>Win 11 View</span>
+                      <Download className="w-3 h-3 text-blue-400" />
+                    </a>
 
                     <a
                       href={cam.camera_defaults?.admin_url || `http://${cam.ip}`}

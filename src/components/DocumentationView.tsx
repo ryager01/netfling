@@ -117,6 +117,9 @@ export const DocumentationView: React.FC<DocumentationViewProps> = ({
               <strong className="text-white">Concurrent Discovery Sweep:</strong> Broadcasts ARP requests and ICMP echo probes in parallel worker threads, resolving IP, MAC hardware addresses, and measuring ping round-trip latency.
             </li>
             <li>
+              <strong className="text-white">Dual-Stack IPv6 Neighbor Discovery (NDP / EUI-64):</strong> Discovers IPv6 link-local and global unicast addresses across Windows 11 and Linux using <code className="text-purple-300">netsh interface ipv6 show neighbors</code>, PowerShell <code className="text-purple-300">Get-NetNeighbor</code>, <code className="text-purple-300">ip -6 neigh show</code>, and RFC 4291 EUI-64 deterministic SLAAC generation.
+            </li>
+            <li>
               <strong className="text-white">Optional Initial Port Scan:</strong> Users can toggle automated top-TCP service scans during the initial sweep. Discovered open ports are immediately stored in the SQLite inventory database with each device.
             </li>
             <li>
@@ -251,29 +254,74 @@ export const DocumentationView: React.FC<DocumentationViewProps> = ({
       title: "7. Hidden Cameras & Surveillance Management",
       badge: "Surveillance",
       icon: Camera,
-      summary: "RTSP/ONVIF feed discovery, live video player, PTZ control pad, settings modification, and defaults.",
+      summary: "Real Wowza RTSP streaming, Windows 11 native playback, zero-simulator policy, PTZ controls, and live progress meters.",
       content: (
         <div className="space-y-4 text-xs leading-relaxed text-slate-300">
           <p>
-            Matches and exceeds Fing's Hidden Camera Detection feature by providing a complete live management console:
+            Matches and exceeds Fing's Hidden Camera Detection feature by providing a real-time surveillance console connected directly to live network cameras:
           </p>
+
+          <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-lg space-y-2">
+            <span className="font-mono text-cyan-400 font-bold flex items-center gap-1.5">
+              <Camera className="w-4 h-4 text-cyan-400" /> Live Cloud & Local RTSP Architecture (Zero Simulator)
+            </span>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              NetSentinel implements a strict <strong className="text-white">Zero Simulator Policy</strong>. Video players stream directly from active RTSP feeds without synthetic canvas mockups. The default high-definition test feed is anchored to:
+            </p>
+            <div className="bg-slate-950 p-2.5 rounded border border-slate-800 font-mono text-[11px] text-emerald-300 flex items-center justify-between gap-2 overflow-x-auto">
+              <span className="truncate">rtsp://9627b0bf2a7b.entrypoint.cloud.wowza.com:1935/app-p5260J38/66abe4b9_stream1</span>
+              <button
+                onClick={() => copyCode("rtsp://9627b0bf2a7b.entrypoint.cloud.wowza.com:1935/app-p5260J38/66abe4b9_stream1", "wowza_rtsp")}
+                className="text-cyan-400 hover:text-white shrink-0 px-2 py-0.5 rounded bg-slate-800 text-[10px]"
+              >
+                {copiedCode === "wowza_rtsp" ? "Copied" : "Copy"}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Low-latency transport runs over TCP interleaved sockets (<code className="text-slate-200">-rtsp_transport tcp</code>) via kernel FFmpeg pipelines, outputting continuous multipart MJPEG streams (<code className="text-cyan-300">image2pipe</code>) directly to client browser viewports.
+            </p>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-lg space-y-2">
+            <span className="font-mono text-blue-400 font-bold flex items-center gap-1.5">
+              <HardDrive className="w-4 h-4 text-blue-400" /> Windows 11 Native Stream Playback
+            </span>
+            <p className="text-[11px] text-slate-300">
+              Surveillance streams can be viewed seamlessly across Windows 11 through multiple high-performance methods:
+            </p>
+            <ul className="list-disc pl-5 space-y-1 text-[11px] text-slate-400">
+              <li>
+                <strong className="text-white">In-Browser Direct Viewing:</strong> Hardware-accelerated decoding via Microsoft Edge, Google Chrome, and Firefox on Windows 11 at <code className="text-cyan-300">/api/cameras/:ip/stream</code> and <code className="text-cyan-300">/api/stream/live</code>.
+              </li>
+              <li>
+                <strong className="text-white">One-Click .M3U Playlist Download:</strong> Click the <strong className="text-blue-300">Win 11 Play</strong> button on any camera card to instantly download a ready-to-open playlist file (<code className="text-cyan-300">/api/cameras/:ip/playlist.m3u</code>) associated with Windows Media Player, VLC, PotPlayer, or MPC-HC.
+              </li>
+              <li>
+                <strong className="text-white">PowerShell & Windows Terminal Launch:</strong> Execute high-priority launch macros directly from PowerShell:
+                <pre className="bg-slate-950 p-2 rounded border border-slate-800 text-[10px] font-mono text-cyan-300 mt-1">
+Start-Process "vlc" -ArgumentList "rtsp://9627b0bf2a7b.entrypoint.cloud.wowza.com:1935/app-p5260J38/66abe4b9_stream1"
+                </pre>
+              </li>
+            </ul>
+          </div>
+
           <div className="space-y-2">
-            <h4 className="font-semibold text-white">Core Capabilities:</h4>
+            <h4 className="font-semibold text-white">Full Feature Checklist:</h4>
             <ul className="list-disc pl-5 space-y-1.5">
               <li>
-                <strong className="text-white">Vendor Type Identification:</strong> Detects camera manufacturers (Hikvision, Dahua, Axis, Reolink, Amcrest, Foscam, Wyze, Tapo, Lorex, Swann, Ubiquiti UniFi Protect, Bosch) from MAC OUIs, HTTP banners, and RTSP headers.
+                <strong className="text-white">Real-Time Progress Metering:</strong> All long-running scans, RTSP probe handshakes, and subnet camera sweeps feature real-time animated percentage bars and stage descriptors.
               </li>
               <li>
-                <strong className="text-white">Factory Defaults Registry:</strong> Automatically stores default usernames (e.g. <code className="text-cyan-300">admin</code>) and passwords (<code className="text-cyan-300">12345</code>, <code className="text-cyan-300">admin12345</code>, etc.) in the camera defaults section.
+                <strong className="text-white">Vendor Profiling & OUI Detection:</strong> Identifies Axis, Hikvision, Dahua, Reolink, Amcrest, Foscam, Wyze, Tapo, Ubiquiti, and Bosch cameras from MAC prefixes and HTTP/RTSP server headers.
               </li>
               <li>
-                <strong className="text-white">Live Video Stream Display:</strong> Probes RTSP streams on port 554 and displays live H.264 video feed preview with latency and stream health indicators.
+                <strong className="text-white">Factory Defaults Registry:</strong> Displays factory default credentials for discovered camera makes.
               </li>
               <li>
-                <strong className="text-white">Motorized PTZ Movement Control:</strong> Interactive Pan (left/right), Tilt (up/down), Zoom (in/out), Center Reset, speed slider, and 1–4 preset positions via <code className="text-cyan-300">/api/cameras/:ip/ptz</code>.
+                <strong className="text-white">Motorized PTZ Movement Control:</strong> Interactive Pan (left/right), Tilt (up/down), Zoom (in/out), Center Reset, speed slider, and 1–4 preset positions.
               </li>
               <li>
-                <strong className="text-white">Camera Settings Modification:</strong> Adjust resolution (1080p, 2K, 4K), framerate, bitrate, night vision IR (auto/on/off), motion sensitivity, audio mic, and OSD overlay with persistent save via <code className="text-cyan-300">PATCH /api/cameras/:ip/settings</code>.
+                <strong className="text-white">Settings Customization:</strong> Adjust resolution (1080p, 2K, 4K), framerate, bitrate, night vision IR (auto/on/off), motion sensitivity, audio mic, and OSD overlay.
               </li>
             </ul>
           </div>
@@ -344,7 +392,7 @@ export const DocumentationView: React.FC<DocumentationViewProps> = ({
       title: "10. Embedded Terminal Console & Shell",
       badge: "Interactive Shell",
       icon: Terminal,
-      summary: "Live interactive execution shell, macro buttons, command history, and CRT scanline effect.",
+      summary: "Live interactive execution shell, macro buttons, execution progress meter, IPv6 diagnostics, and CRT scanlines.",
       content: (
         <div className="space-y-4 text-xs leading-relaxed text-slate-300">
           <p>
@@ -352,6 +400,9 @@ export const DocumentationView: React.FC<DocumentationViewProps> = ({
           </p>
           <ul className="list-disc pl-5 space-y-1.5">
             <li><strong className="text-white">Interactive Command Line:</strong> Type commands directly at the <code className="text-cyan-300">NetSentinel $ </code> prompt and execute with Enter.</li>
+            <li><strong className="text-white">Real-Time Progress Meter:</strong> Any executing command or sweep displays a dynamic animated percentage bar with active stage telemetry (e.g. "Probing host", "Analyzing headers", "Parsing output") above the prompt.</li>
+            <li><strong className="text-white">Dual-Stack IPv6 Commands:</strong> Execute <code className="text-cyan-300">ipv6 sweep</code>, <code className="text-cyan-300">ipv6 list</code>, <code className="text-cyan-300">neigh</code>, and <code className="text-cyan-300">ip -6 neigh show</code> to audit neighboring IPv6 interfaces and link-local SLAAC addresses on Windows 11 and Linux.</li>
+            <li><strong className="text-white">Surveillance & Camera Commands:</strong> Probe camera networks via <code className="text-cyan-300">cameras</code>, inspect Wowza cloud RTSP feeds, or generate native Windows 11 stream URLs.</li>
             <li><strong className="text-white">Command History Buffer:</strong> Navigate previous commands using Up/Down arrow keys.</li>
             <li><strong className="text-white">Preset Macro Buttons:</strong> Single-click shortcuts for <code className="text-cyan-300">help</code>, <code className="text-cyan-300">devices</code>, <code className="text-cyan-300">dnshijack</code>, <code className="text-cyan-300">rat-check</code>, <code className="text-cyan-300">cameras</code>, <code className="text-cyan-300">scan</code>, <code className="text-cyan-300">speedtest</code>, and <code className="text-cyan-300">status</code>.</li>
             <li><strong className="text-white">Visual Customization:</strong> Toggle CRT retro green scanline phosphor glow, fullscreen mode, and clear screen.</li>

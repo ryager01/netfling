@@ -121,9 +121,10 @@ Centralized structured telemetry logging engine:
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/status` | Network routing overview, active counts, and daemon status |
-| `GET` | `/api/devices` | Full device inventory with open ports |
+| `GET` | `/api/devices` | Full device inventory with open ports and IPv6 addresses |
 | `POST` | `/api/scan` | Triggers active subnet discovery sweep with live status |
 | `GET` | `/api/scan/status` | Real-time discovery progress (stage, message, percent, hosts found) |
+| `POST` | `/api/discovery/ipv6/sweep` | Dual-stack IPv6 neighbor sweep (NDP cache & RFC 4291 EUI-64 SLAAC) |
 | `GET` | `/api/subnets` | Enumerates all known and routable subnets |
 | `POST` | `/api/guided-discovery` | First-run guided multi-subnet discovery & initial port audit |
 | `GET` | `/api/network-interfaces` | All network devices, gateways, and subnets (Linux & Windows) |
@@ -135,13 +136,23 @@ Centralized structured telemetry logging engine:
 | `GET` | `/api/wifi/scan` | Scans 2.4/5/6 GHz Wi-Fi spectrum, channels, signal & saturation |
 | `POST` | `/api/wifi/rescan` | Triggers on-demand Wi-Fi spectrum sweep |
 
+### Surveillance & Camera Streaming (Zero Simulator)
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/cameras` | Scans local network for hidden cameras & RTSP streams |
+| `GET` | `/api/stream/live` | Ultra-low latency FFmpeg MJPEG proxy of primary Wowza cloud RTSP stream |
+| `GET` | `/api/cameras/:ip/stream` | Low-latency FFmpeg MJPEG proxy of camera RTSP feed with cached frame fallback |
+| `GET` | `/api/stream/playlist.m3u` | Windows 11 one-click `.m3u` playlist for default Wowza stream |
+| `GET` | `/api/cameras/:ip/playlist.m3u` | Windows 11 one-click `.m3u` playlist for camera stream playback in VLC/WMP |
+| `POST` | `/api/cameras/:ip/ptz` | Interactive PTZ movement (pan, tilt, zoom, center, speed, presets 1-4) |
+| `PATCH` | `/api/cameras/:ip/settings` | Updates camera settings (resolution, FPS, bitrate, IR night vision, sensitivity) |
+
 ### Port Audits & Cyber Defense
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/portscan` | Multi-threaded TCP connect prober (up to 500 threads) |
 | `GET` | `/api/portscan/status` | Live port scan status (ports checked vs. total, open count, %) |
 | `GET` | `/api/router-audit` | Audits router UPnP, DNS integrity, and security score |
-| `GET` | `/api/cameras` | Scans local network for hidden cameras & RTSP streams |
 | `POST` | `/api/tools/rat-check` | Multi-mode RAT & Trojan auditor (`network`, `single`, or `host_integrity`) |
 | `GET` | `/api/tools/rat/host-audit` | Workstation system integrity & local Trojan forensics |
 | `ALL` | `/api/tools/dns-hijack` | Full DNS hijacking, spoofing, and poisoning audit |

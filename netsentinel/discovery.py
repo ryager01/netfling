@@ -903,7 +903,40 @@ class SubnetDiscoveryEngine:
         except Exception:
             pass
 
-        # 2. Query kernel neighbor cache via `ip -6 neigh show` or `ndp -a` or `netsh`
+        # 2. Query kernel neighbor cache via `ip -6 neigh show` or Windows 11 `netsh` / PowerShell
+        try:
+            if sys.platform == "win32" or shutil.which("netsh"):
+                # Windows 11: netsh interface ipv6 show neighbors
+                proc_win = subprocess.run(["netsh", "interface", "ipv6", "show", "neighbors"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=2.5)
+                if proc_win.returncode == 0 and proc_win.stdout:
+                    for line in proc_win.stdout.splitlines():
+                        # Match: <IPv6> <MAC with dashes or colons>
+                        m = re.search(r"([a-fA-F0-9:]+)\s+([a-fA-F0-9]{2}[-:][a-fA-F0-9]{2}[-:][a-fA-F0-9]{2}[-:][a-fA-F0-9]{2}[-:][a-fA-F0-9]{2}[-:][a-fA-F0-9]{2})", line.strip())
+                        if m:
+                            n_ip, n_mac = m.group(1), m.group(2).replace("-", ":").upper()
+                            if not n_ip.startswith("fe80"):
+                                ipv6_map[n_mac] = n_ip
+                            elif n_mac not in ipv6_map:
+                                ipv6_map[n_mac] = n_ip
+
+                # Windows 11 PowerShell Get-NetNeighbor fallback
+                if not ipv6_map and shutil.which("powershell"):
+                    ps_cmd = "Get-NetNeighbor -AddressFamily IPv6 | Where-Object { $_.LinkLayerAddress } | ForEach-Object { \"$($_.IPAddress) $($_.LinkLayerAddress)\" }"
+                    proc_ps = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=3.0)
+                    if proc_ps.returncode == 0 and proc_ps.stdout:
+                        for line in proc_ps.stdout.splitlines():
+                            parts = line.strip().split()
+                            if len(parts) >= 2 and ":" in parts[0]:
+                                n_ip, n_mac = parts[0], parts[1].replace("-", ":").upper()
+                                if len(n_mac) == 17:
+                                    if not n_ip.startswith("fe80"):
+                                        ipv6_map[n_mac] = n_ip
+                                    elif n_mac not in ipv6_map:
+                                        ipv6_map[n_mac] = n_ip
+        except Exception:
+            pass
+
+        # Linux / Unix: `ip -6 neigh show`
         try:
             cmd = ["ip", "-6", "neigh", "show"]
             proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=2.0)

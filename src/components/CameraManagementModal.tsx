@@ -34,6 +34,9 @@ import {
   ExternalLink,
   Save,
   Radio,
+  Monitor,
+  Download,
+  Terminal,
 } from "lucide-react";
 import { SurveillanceStreamPlayer } from "./SurveillanceStreamPlayer";
 
@@ -155,7 +158,7 @@ export function CameraManagementModal({
     default_username: camera.camera_defaults?.default_username || "admin",
     default_password: camera.camera_defaults?.default_password || "admin",
     admin_url: camera.camera_defaults?.admin_url || `http://${camera.ip}`,
-    rtsp_url: camera.camera_defaults?.rtsp_url || "rtsp://rtsp.rtsplink.com/live/people?token=d37fb79892a53ccf13a8cd1eb108f3c163252d5e538a6864196d982de4b85a71",
+    rtsp_url: camera.camera_defaults?.rtsp_url || "rtsp://9627b0bf2a7b.entrypoint.cloud.wowza.com:1935/app-p5260J38/66abe4b9_stream1",
     notes: camera.camera_defaults?.notes || "Live RTSP surveillance stream feed",
   });
   const [isSavingDefaults, setIsSavingDefaults] = useState<boolean>(false);
@@ -436,6 +439,62 @@ export function CameraManagementModal({
                     </a>
                   </div>
                   <div className="text-[11px] text-slate-500 font-mono">ONVIF Service Port: 8000</div>
+                </div>
+              </div>
+
+              {/* Windows 11 Native Streaming & Player Integration */}
+              <div className="bg-gradient-to-r from-blue-950/60 via-slate-900 to-indigo-950/60 border border-blue-500/40 p-4 rounded-xl space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30">
+                      <Monitor className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-white font-mono">Windows 11 Native Stream View</span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                          Direct Playback
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Open live stream in Windows Media Player, VLC, PotPlayer, or Edge hardware-accelerated viewer on Windows 11.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={`/api/cameras/${camera.ip}/playlist.m3u?url=${encodeURIComponent(customDefaults.rtsp_url)}`}
+                      download={`camera_${camera.ip.replace(/\./g, "-")}.m3u`}
+                      className="px-3 py-1.5 bg-blue-500 hover:bg-blue-400 text-slate-950 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Open in Windows 11 (.m3u)</span>
+                    </a>
+
+                    <button
+                      onClick={() => copyToClipboard(`Start-Process "vlc" -ArgumentList "${customDefaults.rtsp_url}"`, "ps_vlc")}
+                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-300 border border-blue-500/30 text-xs font-mono rounded-lg flex items-center gap-1.5 transition-colors"
+                      title="Copy PowerShell command to launch in VLC"
+                    >
+                      <Terminal className="w-3.5 h-3.5" />
+                      <span>PowerShell</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-slate-950/80 rounded-lg border border-slate-800/80 flex items-center justify-between text-[11px] font-mono text-slate-400">
+                  <div className="truncate max-w-xl">
+                    <span className="text-slate-500">RTSP Stream URI: </span>
+                    <span className="text-cyan-300">{customDefaults.rtsp_url}</span>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(customDefaults.rtsp_url, "rtsp_modal")}
+                    className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono shrink-0 ml-2"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>Copy URI</span>
+                  </button>
                 </div>
               </div>
             </div>

@@ -20,7 +20,7 @@ from .credentials import lookup_default_credentials
 CAMERA_PORTS = [554, 8000, 8080, 8899, 8554, 37777, 80, 443]
 
 # Live surveillance RTSP stream provided by user
-LIVE_RTSP_FEED = "rtsp://rtsp.rtsplink.com/live/people?token=d37fb79892a53ccf13a8cd1eb108f3c163252d5e538a6864196d982de4b85a71"
+LIVE_RTSP_FEED = "rtsp://9627b0bf2a7b.entrypoint.cloud.wowza.com:1935/app-p5260J38/66abe4b9_stream1"
 
 CAMERA_MODEL_SIGNATURES = [
     {

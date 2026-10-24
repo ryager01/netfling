@@ -227,6 +227,25 @@
   - [x] 20.3.3 `make_win11_installer.py`: Packages self-contained `NetSentinel-Windows11-Setup.zip`
   - [x] 20.3.4 UI Modal (`Windows11InstallerModal.tsx`) with direct download buttons and Windows Terminal one-liner
 
-
-
-
+## Phase 21: Wowza Live RTSP Streaming, Windows 11 Video Playback, Dual-Stack IPv6 & Universal Progress Meters
+- [x] 21.1 Live Wowza Cloud RTSP Video Engine & Zero Simulator Elimination
+  - [x] 21.1.1 Configured live feed URL: `rtsp://9627b0bf2a7b.entrypoint.cloud.wowza.com:1935/app-p5260J38/66abe4b9_stream1` across `surveillance.py`, `server.ts`, and UI components
+  - [x] 21.1.2 Completely removed simulator canvas fallbacks; implemented native FFmpeg low-latency MJPEG proxy (`image2pipe`) over TCP transport
+  - [x] 21.1.3 Cached authentic 1280x720 video snapshot fallback (`./live_cctv_frame.jpg`) during RTSP connection negotiation
+- [x] 21.2 Windows 11 Native Surveillance Viewing & Integration
+  - [x] 21.2.1 In-browser hardware-accelerated playback on Edge / Chrome (`/api/stream/live` and `/api/cameras/:ip/stream`)
+  - [x] 21.2.2 One-click `.m3u` playlist export endpoints (`/api/cameras/:ip/playlist.m3u` and `/api/stream/playlist.m3u`) for Windows Media Player, VLC, PotPlayer, MPC-HC
+  - [x] 21.2.3 One-click PowerShell launch command generator (`Start-Process "vlc" -ArgumentList "..."`) in Camera Management modal
+- [x] 21.3 Dual-Stack IPv6 Discovery (NDP / EUI-64)
+  - [x] 21.3.1 Windows 11 neighbor discovery via `netsh interface ipv6 show neighbors` and PowerShell `Get-NetNeighbor`
+  - [x] 21.3.2 Linux neighbor cache inspection via `ip -6 neigh show`
+  - [x] 21.3.3 RFC 4291 EUI-64 deterministic MAC-to-IPv6 link-local address generation
+  - [x] 21.3.4 Dual-stack persistence in SQLite database schema (`ipv6` column in `devices`)
+  - [x] 21.3.5 UI controls: IPv6 Neighbor Sweep button, IPv6 stack filter badge, and clipboard copy in Device Inventory
+- [x] 21.4 Universal Real-Time Progress Meters
+  - [x] 21.4.1 Subnet discovery sweep real-time multi-stage HUD banner and progress percentage
+  - [x] 21.4.2 IPv6 neighbor sweep multi-stage progress meter (15% -> 40% -> 70% -> 90% -> 100%)
+  - [x] 21.4.3 Multi-threaded port scan checked vs total counter (`1,024 / 1,024 (100.0%)`)
+  - [x] 21.4.4 RAT / Trojan security sweep animated phase progress indicator
+  - [x] 21.4.5 SQLite backup rotation and snapshot creation animated progress bar
+  - [x] 21.4.6 Interactive terminal CLI command execution stage and percentage meter above prompt

@@ -36,7 +36,7 @@ import {
 import { CameraItem } from "./CameraManagementModal";
 
 export const DEFAULT_LIVE_RTSP_STREAM =
-  "rtsp://rtsp.rtsplink.com/live/people?token=d37fb79892a53ccf13a8cd1eb108f3c163252d5e538a6864196d982de4b85a71";
+  "rtsp://9627b0bf2a7b.entrypoint.cloud.wowza.com:1935/app-p5260J38/66abe4b9_stream1";
 
 interface SurveillanceStreamPlayerProps {
   camera: CameraItem;
@@ -304,7 +304,7 @@ export function SurveillanceStreamPlayer({
             }}
             onError={() => {
               setStreamConnected(false);
-              setStreamError("Connecting to live RTSP feed (rtsp.rtsplink.com)...");
+              setStreamError("Connecting to live RTSP feed (cloud.wowza.com)...");
             }}
             className={`w-full h-full object-cover transition-transform duration-200 ${getVisionFilterStyle()}`}
             style={{
@@ -423,7 +423,7 @@ export function SurveillanceStreamPlayer({
 
           {!miniMode && (
             <span className="px-2 py-0.5 rounded bg-purple-950/80 border border-purple-500/40 text-purple-300 font-mono text-[10px] hidden lg:inline">
-              rtsplink.com/live/people
+              cloud.wowza.com/live
             </span>
           )}
         </div>
@@ -492,7 +492,7 @@ export function SurveillanceStreamPlayer({
                 setStreamSource("live_stream");
                 setShowUrlEditor(false);
                 handleReconnectStream();
-                showToast("Reset to Default Live Stream (rtsp.rtsplink.com)");
+                showToast("Reset to Default Live Stream (cloud.wowza.com)");
               }}
               className="text-purple-400 hover:underline"
             >
@@ -690,7 +690,7 @@ export function SurveillanceStreamPlayer({
                     ? "bg-purple-500/20 text-purple-300 font-bold border border-purple-500/40"
                     : "text-slate-400 hover:text-white"
                 }`}
-                title="Live RTSP Stream from rtsplink.com"
+                title="Live RTSP Stream from cloud.wowza.com"
               >
                 Live RTSP
               </button>

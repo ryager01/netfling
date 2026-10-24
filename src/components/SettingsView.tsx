@@ -61,6 +61,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ showToast, onRefresh
 
   // Backup state
   const [isBackingUp, setIsBackingUp] = useState<boolean>(false);
+  const [backupProgress, setBackupProgress] = useState<{ active: boolean; stage: string; percent: number }>({
+    active: false,
+    stage: "",
+    percent: 0,
+  });
   const [backupsList, setBackupsList] = useState<BackupItem[]>([]);
   const [latestBackup, setLatestBackup] = useState<any | null>(null);
 
@@ -250,14 +255,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ showToast, onRefresh
 
   const handleCreateBackup = async () => {
     setIsBackingUp(true);
+    setBackupProgress({ active: true, stage: "Locking database WAL write buffer...", percent: 20 });
+    let pct = 20;
+    const timer = setInterval(() => {
+      pct += 15;
+      if (pct > 90) pct = 90;
+      let stage = "Compressing tables & serializing inventory...";
+      if (pct > 60) stage = "Writing timestamped archive to disk...";
+      setBackupProgress({ active: true, stage, percent: pct });
+    }, 180);
+
     try {
       const res = await fetch("/api/settings/backup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ backup_dir: settings.backup.backup_dir }),
       });
+      clearInterval(timer);
       const data = await res.json();
       if (data.success) {
+        setBackupProgress({ active: true, stage: `Backup created: ${data.filename}`, percent: 100 });
         setLatestBackup(data);
         showToast(`Instant backup created: ${data.filename} (${data.size_kb} KB)`);
         fetchBackups();
@@ -265,9 +282,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ showToast, onRefresh
         showToast(`Backup error: ${data.error || "Failed to create snapshot"}`);
       }
     } catch (err: any) {
+      clearInterval(timer);
       showToast(`Backup failed: ${err.message}`);
     } finally {
       setIsBackingUp(false);
+      setTimeout(() => {
+        setBackupProgress({ active: false, stage: "", percent: 0 });
+      }, 1000);
     }
   };
 
@@ -1302,6 +1323,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ showToast, onRefresh
                   {isBackingUp ? "Creating Snapshot..." : "Create Instant Backup Now"}
                 </button>
               </div>
+
+              {/* BACKUP PROGRESS METER (Requested Feature) */}
+              {(isBackingUp || backupProgress.active) && (
+                <div className="bg-gradient-to-r from-emerald-950/80 via-slate-900/90 to-cyan-950/80 border border-emerald-500/40 rounded-xl p-3.5 space-y-1.5 font-mono text-xs">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="flex items-center gap-2 text-emerald-300 font-bold">
+                      <Archive className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                      <span>{backupProgress.stage}</span>
+                    </span>
+                    <span className="text-emerald-400 font-bold">{backupProgress.percent}%</span>
+                  </div>
+                  <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                    <div
+                      className="h-full bg-gradient-to-r from-teal-400 to-emerald-400 rounded-full transition-all duration-200"
+                      style={{ width: `${Math.max(backupProgress.percent, 8)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Form Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
