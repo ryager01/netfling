@@ -1,0 +1,365 @@
+"""
+NetSentinel Comprehensive Function Test Suite.
+Validates each individual function across all core and advanced paid modules:
+- DatabaseEngine
+- OUI Vendor Resolution
+- DeviceFingerprinter
+- SubnetDiscoveryEngine
+- PortScanEngine
+- SpeedTestEngine
+- IntruderAlertDaemon
+- ExportEngine
+- RouterVulnerabilityEngine
+- SurveillanceDetector
+- WakeOnLanEngine
+- PresenceTimelineEngine
+"""
+
+import os
+import socket
+import tempfile
+import time
+import unittest
+
+from netsentinel.db import DatabaseEngine
+from netsentinel.oui import resolve_oui, is_locally_administered
+from netsentinel.fingerprint import DeviceFingerprinter
+from netsentinel.discovery import SubnetDiscoveryEngine
+from netsentinel.portscan import PortScanEngine
+from netsentinel.speedtest import SpeedTestEngine
+from netsentinel.daemon import IntruderAlertDaemon
+from netsentinel.export import ExportEngine
+from netsentinel.vulnerability import RouterVulnerabilityEngine
+from netsentinel.surveillance import SurveillanceDetector
+from netsentinel.wol import WakeOnLanEngine
+from netsentinel.timeline import PresenceTimelineEngine
+
+
+class TestComprehensiveSuite(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temp_db_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        cls.temp_db_file.close()
+        cls.db = DatabaseEngine(db_path=cls.temp_db_file.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.path.exists(cls.temp_db_file.name):
+            os.remove(cls.temp_db_file.name)
+
+    # 1. DatabaseEngine Function Tests
+    def test_db_upsert_and_retrieve_functions(self):
+        # upsert_device
+        res = self.db.upsert_device(
+            mac="00:11:22:33:44:55",
+            ip="192.168.1.100",
+            hostname="my-laptop.lan",
+            vendor="Dell Inc.",
+            device_type="PC / Workstation",
+            latency_ms=1.5,
+        )
+        self.assertTrue(res["is_new"])
+        self.assertEqual(res["device"]["mac"], "00:11:22:33:44:55")
+
+        # get_device
+        dev = self.db.get_device("00:11:22:33:44:55")
+        self.assertIsNotNone(dev)
+        self.assertEqual(dev["ip"], "192.168.1.100")
+
+        # get_all_devices
+        all_devs = self.db.get_all_devices()
+        self.assertGreaterEqual(len(all_devs), 1)
+
+        # update_nickname
+        self.assertTrue(self.db.update_nickname("00:11:22:33:44:55", "Work Precision"))
+        self.assertEqual(self.db.get_device("00:11:22:33:44:55")["nickname"], "Work Precision")
+
+        # toggle_trusted
+        self.assertTrue(self.db.toggle_trusted("00:11:22:33:44:55", True))
+        self.assertEqual(self.db.get_device("00:11:22:33:44:55")["is_trusted"], 1)
+
+        # mark_offline_missing
+        count = self.db.mark_offline_missing(["AA:AA:AA:AA:AA:AA"])
+        self.assertGreaterEqual(count, 1)
+        self.assertEqual(self.db.get_device("00:11:22:33:44:55")["status"], "offline")
+
+    def test_db_port_scans_and_speed_and_alerts(self):
+        # record_port_scans & get_port_scans
+        findings = [{"port": 443, "service_name": "HTTPS", "banner": "TLS", "risk": "Low"}]
+        self.db.record_port_scans(ip="192.168.1.100", mac="00:11:22:33:44:55", scan_results=findings)
+        scans = self.db.get_port_scans(ip="192.168.1.100")
+        self.assertEqual(len(scans), 1)
+        self.assertEqual(scans[0]["port"], 443)
+
+        # record_speed_test & get_latest_speed_test & get_speed_tests
+        self.db.record_speed_test(ping_ms=10.0, download_mbps=250.0, upload_mbps=100.0)
+        latest_speed = self.db.get_latest_speed_test()
+        self.assertIsNotNone(latest_speed)
+        self.assertEqual(latest_speed["download_mbps"], 250.0)
+        self.assertGreaterEqual(len(self.db.get_speed_tests()), 1)
+
+        # log_alert & get_alerts & resolve_alert & clear_all_alerts
+        aid = self.db.log_alert("NEW_DEVICE", "Test alert", mac="00:11:22:33:44:55", ip="192.168.1.100")
+        self.assertGreater(aid, 0)
+        alerts = self.db.get_alerts(unresolved_only=True)
+        self.assertGreaterEqual(len(alerts), 1)
+        self.assertTrue(self.db.resolve_alert(aid))
+        cleared = self.db.clear_all_alerts()
+        self.assertGreaterEqual(cleared, 1)
+
+    # 2. OUI Engine Functions
+    def test_oui_functions(self):
+        # resolve_oui
+        self.assertIn("Apple", resolve_oui("00:17:F2:00:00:01"))
+        self.assertIn("Cisco", resolve_oui("00:00:0C:11:22:33"))
+        self.assertIn("Raspberry Pi", resolve_oui("B8:27:EB:12:34:56"))
+        self.assertEqual(resolve_oui("00:00:00:00:00:00"), "Unknown")
+        # is_locally_administered
+        self.assertTrue(is_locally_administered("02:00:00:00:00:01"))
+        self.assertFalse(is_locally_administered("00:17:F2:00:00:01"))
+
+    # 3. DeviceFingerprinter Functions
+    def test_fingerprint_functions(self):
+        fp = DeviceFingerprinter(default_gateway_ip="192.168.1.1")
+        # resolve_hostname
+        name = fp.resolve_hostname("127.0.0.1")
+        self.assertIn(name, ["localhost", "127.0.0.1", "Unknown"])
+
+        # classify_device
+        self.assertEqual(fp.classify_device("192.168.1.1", "00:14:6C:01:02:03", "router", "Netgear"), "Router / Gateway")
+        self.assertEqual(fp.classify_device("192.168.1.5", "24:0A:C4:01:02:03", "smart-bulb", "Espressif"), "Smart Home / IoT")
+        self.assertEqual(fp.classify_device("192.168.1.9", "00:17:F2:01:02:03", "iPhone", "Apple"), "Smartphone / Tablet")
+
+        # fingerprint
+        res = fp.fingerprint("192.168.1.1", "00:14:6C:01:02:03")
+        self.assertEqual(res["ip"], "192.168.1.1")
+        self.assertIn("Netgear", res["vendor"])
+
+    # 4. SubnetDiscoveryEngine Functions
+    def test_discovery_engine_functions(self):
+        engine = SubnetDiscoveryEngine(db=self.db)
+        net_info = engine.detect_network_environment()
+        self.assertIn("local_ip", net_info)
+        self.assertIn("gateway_ip", net_info)
+        self.assertIn("interface", net_info)
+
+        # _read_kernel_arp_cache
+        arp_cache = engine._read_kernel_arp_cache()
+        self.assertIsInstance(arp_cache, dict)
+
+        # _ping_ip
+        probe = engine._ping_ip("127.0.0.1", timeout=0.2)
+        # Should return None or (ip, latency)
+        if probe:
+            self.assertEqual(probe[0], "127.0.0.1")
+
+        # discover
+        discovered = engine.discover()
+        self.assertIsInstance(discovered, list)
+        self.assertGreaterEqual(len(discovered), 1)
+
+    # 5. PortScanEngine Functions
+    def test_portscan_functions(self):
+        engine = PortScanEngine(db=self.db, timeout=0.5)
+        # scan_single_port on closed port
+        closed_res = engine.scan_single_port("127.0.0.1", 65531)
+        self.assertIsNone(closed_res)
+
+        # grab_banner on closed port
+        banner = engine.grab_banner("127.0.0.1", 65531)
+        self.assertEqual(banner, "")
+
+        # scan_host
+        findings = engine.scan_host("127.0.0.1", ports=[65531, 65532])
+        self.assertEqual(len(findings), 0)
+
+    # 6. SpeedTestEngine Functions
+    def test_speedtest_functions(self):
+        tester = SpeedTestEngine(db=self.db)
+        # measure_latency_socket
+        lat = tester.measure_latency_socket("1.1.1.1", 53, samples=2)
+        self.assertIsInstance(lat, float)
+
+        # run_fallback_benchmark
+        bm = tester.run_fallback_benchmark()
+        self.assertIn("download_mbps", bm)
+        self.assertIn("upload_mbps", bm)
+        self.assertIn("ping_ms", bm)
+
+    # 7. IntruderAlertDaemon Functions
+    def test_daemon_lifecycle_functions(self):
+        daemon = IntruderAlertDaemon(db=self.db, interval_seconds=1)
+        self.assertFalse(daemon.is_running())
+        daemon.start()
+        self.assertTrue(daemon.is_running())
+        daemon.stop()
+        self.assertFalse(daemon.is_running())
+
+    # 8. ExportEngine Functions
+    def test_export_engine_functions(self):
+        exporter = ExportEngine(db=self.db)
+        inv = exporter.get_full_inventory_data()
+        self.assertIn("metadata", inv)
+        self.assertIn("devices", inv)
+
+        json_str = exporter.export_to_json()
+        self.assertTrue(json_str.startswith("{"))
+        csv_str = exporter.export_to_csv()
+        self.assertIn("IP Address", csv_str)
+
+    # 9. Advanced Paid Fing: RouterVulnerabilityEngine Functions
+    def test_router_vulnerability_functions(self):
+        v_engine = RouterVulnerabilityEngine(db=self.db, gateway_ip="127.0.0.1")
+        # audit_dns_security
+        dns_res = v_engine.audit_dns_security()
+        self.assertIn("status", dns_res)
+        self.assertIn("resolved_ips", dns_res)
+
+        # check_upnp_exposure
+        upnp_res = v_engine.check_upnp_exposure("127.0.0.1")
+        self.assertIn("upnp_exposed", upnp_res)
+        self.assertIn("risk", upnp_res)
+
+        # calculate_security_score
+        score_res = v_engine.calculate_security_score()
+        self.assertIn("score", score_res)
+        self.assertIn("grade", score_res)
+        self.assertIn(score_res["grade"], ["A", "B", "C", "F"])
+
+        # run_full_vulnerability_audit
+        full_res = v_engine.run_full_vulnerability_audit()
+        self.assertIn("security_score", full_res)
+        self.assertIn("dns_audit", full_res)
+
+    # 10. Advanced Paid Fing: SurveillanceDetector Functions
+    def test_surveillance_detector_functions(self):
+        detector = SurveillanceDetector(db=self.db)
+        # probe_rtsp_stream on non-camera
+        is_rtsp = detector.probe_rtsp_stream("127.0.0.1", 65533, timeout=0.2)
+        self.assertFalse(is_rtsp)
+
+        # check_device_is_camera with a simulated Hikvision camera device
+        simulated_cam = {
+            "ip": "192.168.1.180",
+            "mac": "28:57:BE:11:22:33",
+            "vendor": "Hikvision Digital Technology",
+            "hostname": "HIK-IPCam-FrontDoor",
+        }
+        cam_res = detector.check_device_is_camera(simulated_cam)
+        self.assertIsNotNone(cam_res)
+        self.assertTrue(cam_res["is_surveillance"])
+
+        # scan_network_for_cameras
+        all_cams = detector.scan_network_for_cameras()
+        self.assertIsInstance(all_cams, list)
+
+    # 11. Advanced Paid Fing: WakeOnLanEngine Functions
+    def test_wol_functions(self):
+        wol = WakeOnLanEngine()
+        # validate_mac
+        valid_bytes = wol.validate_mac("00:11:22:33:44:55")
+        self.assertIsNotNone(valid_bytes)
+        self.assertEqual(len(valid_bytes), 6)
+        invalid_bytes = wol.validate_mac("INVALID_MAC")
+        self.assertIsNone(invalid_bytes)
+
+        # create_magic_packet
+        packet = wol.create_magic_packet(valid_bytes)
+        self.assertEqual(len(packet), 102)
+        self.assertTrue(packet.startswith(b"\xFF\xFF\xFF\xFF\xFF\xFF"))
+
+        # wake (send UDP broadcast)
+        wake_res = wol.wake("00:11:22:33:44:55")
+        self.assertTrue(wake_res["success"])
+
+    # 12. Advanced Paid Fing: PresenceTimelineEngine Functions
+    def test_presence_timeline_functions(self):
+        timeline = PresenceTimelineEngine(db=self.db)
+        # record_presence_event
+        eid = timeline.record_presence_event(
+            mac="00:11:22:33:44:55",
+            ip="192.168.1.100",
+            event_type="CONNECTED",
+            details="Device joined Wi-Fi",
+        )
+        self.assertGreater(eid, 0)
+
+        # get_device_history
+        history = timeline.get_device_history("00:11:22:33:44:55")
+        self.assertGreaterEqual(len(history), 1)
+        self.assertEqual(history[0]["event_type"], "CONNECTED")
+
+        # get_recent_timeline
+        recent = timeline.get_recent_timeline(limit=10)
+        self.assertGreaterEqual(len(recent), 1)
+
+        # set_pause_internet & get_access_policy
+        pause_res = timeline.set_pause_internet("00:11:22:33:44:55", pause=True, notes="Bedtime restriction")
+        self.assertTrue(pause_res["is_paused"])
+        policy = timeline.get_access_policy("00:11:22:33:44:55")
+        self.assertEqual(policy["is_paused"], 1)
+
+        # unpause
+        unpause_res = timeline.set_pause_internet("00:11:22:33:44:55", pause=False)
+        self.assertFalse(unpause_res["is_paused"])
+
+    # 13. Custom Metadata & Quarantine Engine Tests
+    def test_custom_metadata_and_quarantine(self):
+        mac = "CC:DD:EE:11:22:33"
+        self.db.upsert_device(mac=mac, ip="192.168.1.150", vendor="Cisco Systems", hostname="switch-01")
+
+        # Custom metadata assignment
+        meta = {"Owner": "DevOps Team", "Rack": "B-4", "Firmware": "v15.2"}
+        self.assertTrue(self.db.update_custom_metadata(mac, meta))
+        dev = self.db.get_device(mac)
+        self.assertIsNotNone(dev)
+        self.assertEqual(dev["custom_metadata"]["Owner"], "DevOps Team")
+        self.assertEqual(dev["custom_metadata"]["Rack"], "B-4")
+
+        # Quarantine placement
+        self.assertTrue(self.db.set_quarantine(mac, True, "Unauthorized switch port connection"))
+        dev_quarantined = self.db.get_device(mac)
+        self.assertEqual(dev_quarantined["is_quarantined"], 1)
+        self.assertEqual(dev_quarantined["quarantine_reason"], "Unauthorized switch port connection")
+
+        # Release from quarantine
+        self.assertTrue(self.db.set_quarantine(mac, False))
+        dev_released = self.db.get_device(mac)
+        self.assertEqual(dev_released["is_quarantined"], 0)
+
+    # 14. Default Credentials Knowledge Base Tests
+    def test_default_credentials_registry(self):
+        from netsentinel.credentials import lookup_default_credentials
+
+        # Netgear Router
+        ng_cred = lookup_default_credentials("Netgear Inc.", "netgear-r7000", "Router", "192.168.1.1")
+        self.assertIsNotNone(ng_cred)
+        self.assertEqual(ng_cred["default_username"], "admin")
+        self.assertEqual(ng_cred["default_password"], "password")
+        self.assertEqual(ng_cred["admin_url"], "http://192.168.1.1")
+
+        # TP-Link
+        tp_cred = lookup_default_credentials("TP-Link Technologies", "archer-c7", "Router", "192.168.0.1")
+        self.assertIsNotNone(tp_cred)
+        self.assertEqual(tp_cred["default_username"], "admin")
+        self.assertEqual(tp_cred["default_password"], "admin")
+
+        # Ubiquiti UniFi
+        ubnt_cred = lookup_default_credentials("Ubiquiti Networks", "UniFi-AP", "Access Point", "192.168.1.20")
+        self.assertIsNotNone(ubnt_cred)
+        self.assertEqual(ubnt_cred["default_username"], "ubnt")
+        self.assertEqual(ubnt_cred["default_password"], "ubnt")
+
+        # Raspberry Pi
+        rpi_cred = lookup_default_credentials("Raspberry Pi Foundation", "raspberrypi", "SBC", "192.168.1.50")
+        self.assertIsNotNone(rpi_cred)
+        self.assertEqual(rpi_cred["default_username"], "pi")
+        self.assertEqual(rpi_cred["default_password"], "raspberry")
+
+        # Generic / Unknown vendor
+        gen_cred = lookup_default_credentials("Unknown Vendor Inc", "my-device", "Other", "192.168.1.99")
+        self.assertIsNone(gen_cred)
+
+
+if __name__ == "__main__":
+    unittest.main()

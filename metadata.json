@@ -1,0 +1,6 @@
+{
+  "name": "NetFling - NetSentinel",
+  "description": "Local network discovery, device inventory, port scanning, speed test, and intruder alert suite exceeding Fing capabilities.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

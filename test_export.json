@@ -1,0 +1,75 @@
+{
+  "metadata": {
+    "generated_at": "2026-10-10T12:47:31.535796+00:00",
+    "tool": "NetSentinel Network Suite",
+    "device_count": 2,
+    "online_count": 2,
+    "trusted_count": 0,
+    "alert_count": 2
+  },
+  "latest_speed_test": {
+    "id": 1,
+    "timestamp": "2026-10-10T12:47:31.376831+00:00",
+    "ping_ms": 1800000.0,
+    "download_mbps": 416.63,
+    "upload_mbps": 1034.65,
+    "server_name": "Toronto, ON (TELUS Mobility)",
+    "server_country": "Canada",
+    "client_ip": "34.34.241.106",
+    "isp": "Google Virtual Private Cloud"
+  },
+  "devices": [
+    {
+      "mac": "02:00:00:00:00:FE",
+      "ip": "0.0.0.0",
+      "hostname": "Unknown",
+      "vendor": "Private / Randomized MAC (Mobile/OS)",
+      "device_type": "Router / Gateway",
+      "nickname": "",
+      "is_known": 0,
+      "is_trusted": 0,
+      "first_seen": "2026-10-10T12:44:37.126750+00:00",
+      "last_seen": "2026-10-10T12:47:16.968880+00:00",
+      "latency_ms": 1.0,
+      "status": "online",
+      "open_ports": []
+    },
+    {
+      "mac": "02:00:00:00:00:01",
+      "ip": "169.254.8.1",
+      "hostname": "Unknown",
+      "vendor": "Private / Randomized MAC (Mobile/OS)",
+      "device_type": "General Device",
+      "nickname": "",
+      "is_known": 0,
+      "is_trusted": 0,
+      "first_seen": "2026-10-10T12:44:36.323682+00:00",
+      "last_seen": "2026-10-10T12:47:16.166795+00:00",
+      "latency_ms": 0.1,
+      "status": "online",
+      "open_ports": []
+    }
+  ],
+  "alerts": [
+    {
+      "id": 2,
+      "timestamp": "2026-10-10T12:44:37.126952+00:00",
+      "alert_type": "NEW_DEVICE",
+      "mac": "02:00:00:00:00:FE",
+      "ip": "0.0.0.0",
+      "message": "New device detected on network: 0.0.0.0 [02:00:00:00:00:FE] (Private / Randomized MAC (Mobile/OS))",
+      "severity": "WARNING",
+      "resolved": 0
+    },
+    {
+      "id": 1,
+      "timestamp": "2026-10-10T12:44:36.324037+00:00",
+      "alert_type": "NEW_DEVICE",
+      "mac": "02:00:00:00:00:01",
+      "ip": "169.254.8.1",
+      "message": "New device detected on network: 169.254.8.1 [02:00:00:00:00:01] (Private / Randomized MAC (Mobile/OS))",
+      "severity": "WARNING",
+      "resolved": 0
+    }
+  ]
+}
