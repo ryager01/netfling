@@ -249,3 +249,23 @@
   - [x] 21.4.4 RAT / Trojan security sweep animated phase progress indicator
   - [x] 21.4.5 SQLite backup rotation and snapshot creation animated progress bar
   - [x] 21.4.6 Interactive terminal CLI command execution stage and percentage meter above prompt
+
+## Phase 22: Comprehensive Feature Documentation (Define, Describe, Explain & Use)
+- [x] 22.1 Complete Architectural & Feature Manual Overhaul (`DocumentationView.tsx`)
+  - [x] 22.1.1 Implemented `FeatureDocCard` component providing structured triplets: Define, Describe, Explain & Use
+  - [x] 22.1.2 Applied structured Define, Describe, Explain & Use documentation across all 15 system sections:
+    - Section 1: System Overview & Architecture (Dual-Tier, 100% Local Privacy, SQLite WAL)
+    - Section 2: First-Run Guided Discovery & Subnet Sweeper (Multi-Subnet, ARP/ICMP Sweeper, IPv6 NDP/EUI-64, Progress HUD)
+    - Section 3: Device Inventory & Custom Metadata (OUI Fingerprinting, Key-Value Tags, Factory Credentials, Trust Toggle)
+    - Section 4: Zero-Trust Quarantine Isolation Deck (Active/Dormant Partitioning, Forensic Audit Trail, Instant Release)
+    - Section 5: Network Diagnostics & DNS Testing Suite (Dual-Mode Ping, Hop Traceroute, RFC DNS, Email SPF/DMARC, DNSBL)
+    - Section 6: DNS Hijacking & Poisoning Detection (NXDOMAIN Tampering, Canary Benchmark Spoofing, Port 53 Interception, DNSSEC)
+    - Section 7: Hidden Cameras & Surveillance Management (Live Wowza RTSP, Windows 11 Native M3U/PowerShell, PTZ Controls, Settings)
+    - Section 8: Multi-Threaded Port Scanner & Turbo Tuning (500 Worker Threads, Range Profiles, Checked/Total Counter, Banner Grabbing)
+    - Section 9: RAT & Backdoor Detection (35+ Trojan Signatures, Workstation Memory Audit, One-Click Containment)
+    - Section 10: Embedded Terminal Console & Shell (Interactive CLI, Command Execution Progress Meter, IPv6 Diagnostics, CRT Filter)
+    - Section 11: System Settings & Backup Disaster Recovery (SMTP Email Alerts, Thread Tuning, Atomic Backup Progress Meter)
+    - Section 12: Conda Installation & Setup Scripts (Windows 11 Installer, setup_conda.sh, compile_app.sh, environment.yml)
+    - Section 13: Python Rich CLI & Headless Daemon (Rich Color TUI, Background Intruder Daemon)
+    - Section 14: Wi-Fi Multi-Band Spectrum & Saturation Analyzer (Tri-Band 2.4/5/6 GHz, Dual %/dBm Metering, Interference Bleed, Migration)
+    - Section 15: Real-Time System & Debugging Logs Console (Dual-Layer Store, Severity Filters, JSON Tracebacks, Streaming Controls)

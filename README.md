@@ -122,6 +122,7 @@ For full REST API schemas and parameters, see [`docs/API.md`](docs/API.md).
 
 ## Technical Documentation
 
+- 📖 [`docs/FEATURES_MANUAL.md`](docs/FEATURES_MANUAL.md) — Exhaustive technical engineering manual defining, describing, and explaining operational procedures for every single feature.
 - 📐 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Multi-tier discovery architecture, Wi-Fi spectrum algorithms, and logging telemetry bus.
 - 📡 [`docs/API.md`](docs/API.md) — Comprehensive Python and Express REST API documentation.
 - 🛡️ [`docs/SECURITY.md`](docs/SECURITY.md) — Privilege isolation, safe socket auditing, and ARP cache poisoning defense.
