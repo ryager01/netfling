@@ -1555,6 +1555,195 @@ export const DocumentationView: React.FC<DocumentationViewProps> = ({
           },
         ],
       },
+      {
+        id: "nrc-canvas",
+        number: "16",
+        title: "Network Relationship Canvas (NRC) & Zero Trust Intent Engine",
+        badge: "Zero Trust Architecture (ZTA)",
+        icon: Share2,
+        summary: "Visual diagram-driven network security subsystem where the topology diagram itself is the authoritative source of truth, enforcing strict Default Deny and translating intent directly into native firewall rules across Windows, Linux, and BSD/macOS.",
+        targetDeckTab: "canvas",
+        features: [
+          {
+            id: "feat-nrc-diagram-engine",
+            name: "Visual Network Relationship Intent Engine & Authoritative Graph",
+            layerBadge: "Zero Trust Intent / Layer 3-7",
+            protocolBadge: "NRC Graph / Default Deny",
+            definition:
+              "A diagram-centric network policy subsystem that exposes Network Intent rather than low-level implementation details (ACLs, NAT, rule chains). The diagram itself is the authoritative source of truth: any communication not explicitly represented by an edge on the canvas is denied by default.",
+            technicalDescription: {
+              overview:
+                "Unlike traditional firewalls that expose complex rule tables and ACL orders, the Network Relationship Canvas renders nodes (Managed Devices 🟢, Unmanaged Devices 🔴, Warnings 🟡, Offline ⚪, Threat Detected 🚨) and directional relationship edges. Relationships dictate policy: One-Way (A ──443──> B), One-Way Multi-Port (A ──80,443──> B), Bidirectional Trust (A <====80====> B), and Reverse (A <──21──── B). Dynamic transport negotiation is documented using property brackets [1024-65535] without adding confusing line styles.",
+              architectureAndFlow: [
+                "Operator drags managed devices, unmanaged devices, groups, subnets, internet, external services, or applications onto the canvas viewport.",
+                "Connections drawn between nodes create first-class relationship entities stored in SQLite table `canvas_relationships`.",
+                "Properties drawer permits configuring Allowed Ports, Protocol (TCP/UDP/ICMP/ANY), Stateful inspection, Logging, IDS/IPS, and Schedules.",
+                "Absence of an edge triggers automatic Default Deny across all managed endpoints.",
+                "Real-time animation particles visualize traffic states: Green (Expected), Yellow (High Traffic), Orange (New Communication), Red (Threat Detected), Gray (Inactive).",
+              ],
+              technicalParameters: [
+                { name: "Source & Target Node ID", type: "UUID String", description: "The origin and destination endpoints governed by the relationship." },
+                { name: "Direction Mode", type: "Enum ('one_way', 'bidirectional', 'reverse')", description: "Traffic initiation allowance." },
+                { name: "Allowed Ports", type: "Array of Strings/Integers", description: "Target ports explicitly opened (e.g. 443, 80, 22)." },
+                { name: "Triggered Ports Notation", type: "String Bracket Range (e.g. [1024-65535])", description: "Informational documentation of dynamic/ephemeral negotiation." },
+                { name: "Security Controls", type: "Boolean Flags (Stateful, Logging, IDS)", description: "State tracking, security auditing, and intrusion detection enforcement." },
+              ],
+              algorithmsAndProtocols:
+                "Graph-based policy compiler evaluating transitive group memberships, CIDR overlaps, and stateful rule generation. Directed graph traversal checks topological reachability.",
+              progressMeterBehavior:
+                "Displays real-time compilation and dispatch meters during policy enforcement and compliance reconciliation.",
+            },
+            operationalUse: {
+              threatModelAndUtility:
+                "Eliminates misconfigurations, hidden shadow rules, and privilege creep by making the entire security posture readable in 10 seconds by non-network engineers and CISOs alike.",
+              stepByStepProcedure: [
+                "Open the 'Relationship Canvas (NRC)' tab from the Command Center sidebar.",
+                "Drag endpoints or groups from the Asset Catalog onto the interactive grid.",
+                "Hover over a node and drag the connection handle to a destination node to establish a relationship.",
+                "Click the relationship badge to open the Properties Panel and adjust ports, protocol, or stateful toggles.",
+                "Click 'Apply Intent' to commit changes to the authoritative topology database.",
+              ],
+              practicalUseCases: [
+                "Enforcing microsegmentation between employee workstations and production database clusters.",
+                "Isolating rogue or unmanaged IoT cameras so they cannot initiate traffic into internal subnets.",
+                "Auditing compliance before regulatory SOC2, PCI-DSS, or ISO 27001 inspections.",
+              ],
+              troubleshootingAndRemediation:
+                "If an authorized flow is blocked: Verify that a directional edge exists connecting the source to the destination node. Remember that absence of an edge defaults to strict DENY.",
+            },
+          },
+          {
+            id: "feat-nrc-agent-fleet",
+            name: "Outbound-Only NetSentinel Managed Endpoint Daemon",
+            layerBadge: "Endpoint Security / L3-L7",
+            protocolBadge: "Python Daemon / WebSocket / HTTP REST",
+            definition:
+              "A lightweight background daemon (`netsentinel-agent.py`) installed on Windows, Linux, and macOS endpoints that communicates outbound only to the NetSentinel server, queries local socket listeners, applies compiled firewall directives, and reports compliance telemetry.",
+            technicalDescription: {
+              overview:
+                "Functions 100% behind NAT and corporate firewalls without requiring inbound ports. The agent polls `/api/agent/telemetry` or maintains an outbound WebSocket session, reporting active socket listeners (`netstat`/`ss`/`lsof`), active firewall state, OS version, and compliance posture. When policy updates occur, the agent receives native commands and enforces them locally.",
+              architectureAndFlow: [
+                "Agent starts as a Windows Service, systemd daemon, or launchd job.",
+                "Dispatches outbound POST heartbeat with hostname, local IP, OS, active listening ports, and running process names.",
+                "Compares local listening sockets against authoritative canvas policies to detect rogue open ports.",
+                "Receives compiled firewall directives from the server translation layer and invokes native OS commands.",
+                "Reports execution status and compliance score back to the NetSentinel server.",
+              ],
+              technicalParameters: [
+                { name: "Heartbeat Interval", type: "Seconds (Default: 10s)", description: "Outbound polling frequency for health and policy updates." },
+                { name: "Platform Drivers", type: "Windows Defender, nftables, iptables, ufw, pf", description: "Native firewall subsystem invoked by the daemon." },
+                { name: "NAT Traversal Mode", type: "Outbound-Only TCP/TLS", description: "Guarantees operation behind symmetric or full-cone NAT." },
+              ],
+              algorithmsAndProtocols:
+                "Cross-platform socket enumeration using `psutil` or `ss -tulpn` / `netstat -ano`, platform detection via `platform.system()`, secure outbound REST transport.",
+            },
+            operationalUse: {
+              threatModelAndUtility:
+                "Prevents endpoint compromise from persisting unnoticed by continuously reporting listening sockets and enforcing authoritative canvas rules locally on the endpoint.",
+              stepByStepProcedure: [
+                "Click 'Agents' in the Canvas header to open the Agent Deployment modal.",
+                "Select target OS (Windows 11, Linux, or macOS).",
+                "Copy the one-line installation command and execute it in PowerShell (Admin) or bash (sudo).",
+                "Observe the endpoint appear as Managed (🟢 Green) on the canvas with active listening ports tracked.",
+              ],
+              practicalUseCases: [
+                "Managing developer laptops running Windows 11, Ubuntu, and macOS in hybrid enterprise environments.",
+                "Ensuring remote workers behind home NAT routers comply with zero trust network policies.",
+                "Detecting unauthorized listening ports opened by developers or rogue background services.",
+              ],
+              troubleshootingAndRemediation:
+                "If an agent shows offline: 1) Verify the endpoint has outbound HTTP/HTTPS access to the NetSentinel server; 2) Check agent logs for socket permission errors; 3) Re-run the install command to restart the service.",
+            },
+          },
+          {
+            id: "feat-nrc-translation-layer",
+            name: "Multi-Platform Firewall Translation Layer (IFirewallProvider)",
+            layerBadge: "Firewall Abstraction / L3-L4",
+            protocolBadge: "TypeScript IFirewallProvider / netsh / nftables / iptables / ufw / pf",
+            definition:
+              "An abstracted firewall translation subsystem that compiles high-level canvas relationships and Zero Trust intent into syntactically valid, native firewall rules for Windows Defender Firewall (`netsh`), Linux `nftables`, `iptables`, `ufw`, and BSD/macOS `pf`.",
+            technicalDescription: {
+              overview:
+                "Abstracted via TypeScript `IFirewallProvider` interface with methods `getRules()`, `addRule()`, `removeRule()`, `enableRule()`, and `disableRule()`. Translates high-level visual graph relationships into exact native firewall syntax. Handles stateful packet returns (`ct state established,related accept`), multiport bundling, and bidirectional trust rule generation (2 native rules per trust edge).",
+              architectureAndFlow: [
+                "Canvas compiler traverses active relationships in the database.",
+                "Instantiates target provider (e.g. `WindowsFirewallProvider`, `NftablesProvider`, `PfProvider`).",
+                "Applies Default Deny baseline: drops all unrepresented inbound and outbound traffic.",
+                "Iterates over canvas edges: generates allow rules matching source IP, destination IP, protocol, and ports.",
+                "Exports production-ready `.bat`, `.sh`, or `.conf` scripts or dispatches directives directly to agents.",
+              ],
+              technicalParameters: [
+                { name: "Target Driver", type: "Enum ('windows_firewall', 'nftables', 'iptables', 'ufw', 'pf')", description: "Underlying firewall engine." },
+                { name: "Stateful Tracking", type: "Boolean (Default: true)", description: "Permits established/related return packets automatically." },
+                { name: "Logging Level", type: "Boolean (Default: true)", description: "Logs dropped and permitted packets to system security log." },
+              ],
+              algorithmsAndProtocols:
+                "Template-driven AST translation converting graph edges (source, destination, ports, protocol) into platform-specific configuration commands.",
+            },
+            operationalUse: {
+              threatModelAndUtility:
+                "Eliminates vendor lock-in and syntax errors when managing heterogeneous multi-OS environments. Administrators manage one diagram; the translation layer generates the exact firewall code for every host.",
+              stepByStepProcedure: [
+                "Click 'Export Rules' in the Canvas header.",
+                "Select desired platform (Windows Firewall, nftables, iptables, UFW, pf).",
+                "Review the compiled script with syntax highlighting.",
+                "Click 'Copy Script' or 'Download File' to deploy to firewalls or routers.",
+              ],
+              practicalUseCases: [
+                "Generating Windows Defender Firewall Group Policy batch scripts for Windows 11 fleets.",
+                "Deploying `/etc/nftables.conf` configurations to Debian/Ubuntu edge servers.",
+                "Configuring pfSense / OPNsense / macOS `pf.conf` packet filters.",
+              ],
+              troubleshootingAndRemediation:
+                "If rule fails to apply on Linux: Ensure `nftables` service is installed and enabled (`sudo systemctl enable --now nftables`).",
+            },
+          },
+          {
+            id: "feat-nrc-ai-policy",
+            name: "AI-Assisted Natural Language Policy Synthesis Engine",
+            layerBadge: "AI Intent Engine / L7",
+            protocolBadge: "NLP Intent Parsing / Semantic Rule Mapping",
+            definition:
+              "An intelligent natural-language policy creation assistant that parses conversational administrator commands (e.g., 'Allow workstations to access web servers on HTTPS only') and automatically synthesizes authoritative canvas relationships with confidence ratings.",
+            technicalDescription: {
+              overview:
+                "Analyzes user natural language intent queries against active canvas node labels and group inventories. Maps colloquial terms (e.g., 'HTTPS' -> 443 TCP, 'SSH' -> 22 TCP, 'DNS' -> 53 UDP, 'Web servers' -> matching target nodes) and proposes validated relationships with confidence ratings and reasoning notes.",
+              architectureAndFlow: [
+                "Administrator enters a command in the AI Intent bar: 'Developers need SSH access to all Linux servers'.",
+                "Client issues `POST /api/canvas/ai-policy` with query and current node/group context.",
+                "Backend `AIPolicyAssistant` extracts source intent ('Developers'), destination intent ('Linux servers'), protocol ('TCP'), and port ('22').",
+                "Generates explanation notes, confidence score, and proposal object.",
+                "Canvas automatically places or highlights the relationship edge with dynamic bracket notation if requested.",
+              ],
+              technicalParameters: [
+                { name: "Intent Prompt", type: "Natural Language String", description: "Conversational security policy requirement." },
+                { name: "Node Context", type: "Array of Canvas Nodes & Groups", description: "Active entities available on the canvas for semantic binding." },
+                { name: "Confidence Score", type: "Float (0.0 to 1.0)", description: "Semantic alignment certainty." },
+              ],
+              algorithmsAndProtocols:
+                "Regex semantic entity extractors, well-known port mapping dictionaries, and AI grounding against current network topology.",
+            },
+            operationalUse: {
+              threatModelAndUtility:
+                "Drastically speeds up policy authoring while preventing port mistakes or typos that could leave sensitive ports exposed.",
+              stepByStepProcedure: [
+                "Click the purple 'AI Intent' button in the Canvas header.",
+                "Type your policy requirement (or click one of the quick example chips).",
+                "Click 'Synthesize'.",
+                "Review the generated proposal, confidence score, and AI notes in the Properties Drawer.",
+                "Click 'Apply Intent' to commit to the canvas.",
+              ],
+              practicalUseCases: [
+                "Rapidly configuring new environment access rules during incident response.",
+                "Allowing junior sysadmins to describe security intent without having to memorize port numbers.",
+                "Validating complex multi-tier application connection requirements.",
+              ],
+              troubleshootingAndRemediation:
+                "If AI reports matching nodes missing: Ensure that the referenced devices or groups exist on the canvas with matching names or group tags.",
+            },
+          },
+        ],
+      },
     ],
     []
   );

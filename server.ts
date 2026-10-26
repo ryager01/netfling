@@ -2496,6 +2496,257 @@ app.get("/api/installer/windows11/start", (req, res) => {
   res.status(404).send("start.bat not found.");
 });
 
+// =========================================================================
+// Network Relationship Canvas (NRC) Subsystem Endpoints
+// =========================================================================
+
+// 1. Get complete canvas topology (nodes, groups, relationships, agents, stats)
+app.get("/api/canvas/topology", async (req, res) => {
+  try {
+    const output = await runPythonScript([
+      "-c",
+      `
+import json
+from netsentinel.db import DatabaseEngine
+db = DatabaseEngine()
+print(json.dumps(db.get_canvas_topology()))
+      `,
+    ]);
+    const topology = parseJsonSafe(output);
+    res.json(topology);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. Create or update canvas node
+app.post("/api/canvas/nodes", async (req, res) => {
+  try {
+    const nodeData = req.body;
+    const output = await runPythonWithStdin(
+      `
+import sys, json
+from netsentinel.db import DatabaseEngine
+node = json.loads(sys.stdin.read())
+db = DatabaseEngine()
+res = db.upsert_canvas_node(node)
+print(json.dumps(res))
+      `,
+      nodeData
+    );
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. Delete canvas node
+app.delete("/api/canvas/nodes/:id", async (req, res) => {
+  try {
+    const nodeId = req.params.id;
+    const output = await runPythonScript([
+      "-c",
+      `
+import json
+from netsentinel.db import DatabaseEngine
+db = DatabaseEngine()
+success = db.delete_canvas_node('${nodeId}')
+print(json.dumps({'success': success}))
+      `,
+    ]);
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 4. Create or update canvas group
+app.post("/api/canvas/groups", async (req, res) => {
+  try {
+    const groupData = req.body;
+    const output = await runPythonWithStdin(
+      `
+import sys, json
+from netsentinel.db import DatabaseEngine
+group = json.loads(sys.stdin.read())
+db = DatabaseEngine()
+res = db.upsert_canvas_group(group)
+print(json.dumps(res))
+      `,
+      groupData
+    );
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. Delete canvas group
+app.delete("/api/canvas/groups/:id", async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    const output = await runPythonScript([
+      "-c",
+      `
+import json
+from netsentinel.db import DatabaseEngine
+db = DatabaseEngine()
+success = db.delete_canvas_group('${groupId}')
+print(json.dumps({'success': success}))
+      `,
+    ]);
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. Create or update authoritative network relationship
+app.post("/api/canvas/relationships", async (req, res) => {
+  try {
+    const relData = req.body;
+    const output = await runPythonWithStdin(
+      `
+import sys, json
+from netsentinel.db import DatabaseEngine
+rel = json.loads(sys.stdin.read())
+db = DatabaseEngine()
+res = db.upsert_canvas_relationship(rel)
+print(json.dumps(res))
+      `,
+      relData
+    );
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 7. Delete relationship (reverts to Default Deny)
+app.delete("/api/canvas/relationships/:id", async (req, res) => {
+  try {
+    const relId = req.params.id;
+    const output = await runPythonScript([
+      "-c",
+      `
+import json
+from netsentinel.db import DatabaseEngine
+db = DatabaseEngine()
+success = db.delete_canvas_relationship('${relId}')
+print(json.dumps({'success': success}))
+      `,
+    ]);
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 8. Compile intent into concrete firewall rules
+app.post("/api/canvas/compile", async (req, res) => {
+  try {
+    const { provider = "windows_firewall", target_node_id } = req.body || {};
+    const output = await runPythonWithStdin(
+      `
+import sys, json
+from netsentinel.db import DatabaseEngine
+from netsentinel.nrc import FirewallRuleCompiler
+req_data = json.loads(sys.stdin.read())
+provider = req_data.get('provider', 'windows_firewall')
+target_id = req_data.get('target_node_id')
+
+db = DatabaseEngine()
+topology = db.get_canvas_topology()
+result = FirewallRuleCompiler.compile_topology(topology, provider=provider, target_node_id=target_id)
+print(json.dumps(result))
+      `,
+      { provider, target_node_id }
+    );
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 9. AI natural language policy generation
+app.post("/api/canvas/ai-policy", async (req, res) => {
+  try {
+    const { prompt } = req.body || {};
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({ error: "Missing required prompt string" });
+    }
+
+    const output = await runPythonWithStdin(
+      `
+import sys, json
+from netsentinel.db import DatabaseEngine
+from netsentinel.nrc import AIPolicyAssistant
+req_data = json.loads(sys.stdin.read())
+prompt = req_data.get('prompt', '')
+
+db = DatabaseEngine()
+topology = db.get_canvas_topology()
+result = AIPolicyAssistant.parse_intent(prompt, topology)
+print(json.dumps(result))
+      `,
+      { prompt }
+    );
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 10. Compliance Audit Engine
+app.get("/api/canvas/compliance", async (req, res) => {
+  try {
+    const output = await runPythonScript([
+      "-c",
+      `
+import json
+from netsentinel.db import DatabaseEngine
+db = DatabaseEngine()
+print(json.dumps(db.get_compliance_audit()))
+      `,
+    ]);
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 11. Agent Outbound Telemetry Ingestion
+app.post("/api/agent/telemetry", async (req, res) => {
+  try {
+    const agentData = req.body;
+    const output = await runPythonWithStdin(
+      `
+import sys, json
+from netsentinel.db import DatabaseEngine
+data = json.loads(sys.stdin.read())
+db = DatabaseEngine()
+res = db.upsert_agent_node(data)
+print(json.dumps(res))
+      `,
+      agentData
+    );
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 12. Download / Serve Agent Script
+app.get("/api/agent/script", (req, res) => {
+  const agentPath = path.resolve(__dirname, "netsentinel-agent.py");
+  if (fs.existsSync(agentPath)) {
+    res.setHeader("Content-Disposition", 'attachment; filename="netsentinel-agent.py"');
+    res.setHeader("Content-Type", "text/x-python");
+    return res.sendFile(agentPath);
+  }
+  res.status(404).send("netsentinel-agent.py not found.");
+});
+
 // Mount Vite or serve static assets
 async function startServer() {
   if (process.env.NODE_ENV === "production" && fs.existsSync(path.resolve(__dirname, "dist"))) {

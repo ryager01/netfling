@@ -52,6 +52,7 @@ import {
   BookOpen,
   Settings as SettingsIcon,
   Cpu,
+  Share2,
 } from "lucide-react";
 import { TargetIpSelector } from "./components/TargetIpSelector";
 import { QuarantineView } from "./components/QuarantineView";
@@ -67,6 +68,7 @@ import { DocumentationView } from "./components/DocumentationView";
 import { WifiAnalyzerView } from "./components/WifiAnalyzerView";
 import { LogsView } from "./components/LogsView";
 import { Windows11InstallerModal } from "./components/Windows11InstallerModal";
+import { NetworkRelationshipCanvas } from "./components/canvas/NetworkRelationshipCanvas";
 
 interface Device {
   mac: string;
@@ -289,6 +291,7 @@ function ErrorPopover({
 export default function App() {
   const [activeTab, setActiveTab] = useState<
     | "hub"
+    | "canvas"
     | "inventory"
     | "quarantine"
     | "nettools"
@@ -1286,6 +1289,29 @@ export default function App() {
               </div>
             </button>
 
+            {/* Network Relationship Canvas (NRC) */}
+            <button
+              onClick={() => setActiveTab("canvas")}
+              className={`w-full flex items-center ${
+                isSidebarCollapsed ? "justify-center px-0" : "justify-between px-3"
+              } py-2.5 rounded-lg text-xs font-medium transition-all ${
+                activeTab === "canvas"
+                  ? "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 shadow-sm"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+              }`}
+              title="Network Relationship Canvas (NRC): Zero Trust Policy-by-Diagram Engine"
+            >
+              <div className="flex items-center gap-3">
+                <Share2 className="w-4 h-4 shrink-0 text-cyan-400" />
+                {!isSidebarCollapsed && <span>Relationship Canvas</span>}
+              </div>
+              {!isSidebarCollapsed && (
+                <span className="px-1.5 py-0.2 rounded font-mono text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  NRC
+                </span>
+              )}
+            </button>
+
             {/* Inventory */}
             <button
               onClick={() => setActiveTab("inventory")}
@@ -1675,9 +1701,20 @@ export default function App() {
         </aside>
 
         {/* MAIN AREA - FORMATTED LIKE BEAUTIFUL EXECUTIVE REPORTS */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
+        <main
+          className={`flex-1 ${
+            activeTab === "canvas"
+              ? "p-0 overflow-hidden flex flex-col"
+              : "overflow-y-auto p-6 md:p-8 space-y-6"
+          }`}
+        >
+          {/* TAB: NETWORK RELATIONSHIP CANVAS (NRC) */}
+          {activeTab === "canvas" && (
+            <NetworkRelationshipCanvas inventoryDevices={devices} />
+          )}
+
           {/* NETWORK SCAN STATUS DISPLAY (REQUESTED FEATURE) */}
-          {(isScanning || scanStatus.active) && (
+          {activeTab !== "canvas" && (isScanning || scanStatus.active) && (
             <div className="bg-gradient-to-r from-cyan-950/80 via-slate-900/90 to-blue-950/80 border-2 border-cyan-500/50 rounded-xl p-5 shadow-xl shadow-cyan-950/50">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-start sm:items-center gap-3.5">

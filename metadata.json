@@ -1,6 +1,6 @@
 {
   "name": "NetFling - NetSentinel",
-  "description": "Local network discovery, device inventory, port scanning, speed test, and intruder alert suite exceeding Fing capabilities.",
+  "description": "Network discovery, device inventory, port scanning, speed testing, and the Network Relationship Canvas (NRC) Zero Trust policy-by-diagram firewall engine.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
