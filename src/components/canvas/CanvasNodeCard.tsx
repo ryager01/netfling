@@ -18,6 +18,7 @@ import {
   HelpCircle,
   Eye,
   Plus,
+  RotateCcw,
   ArrowRight,
 } from "lucide-react";
 
@@ -27,6 +28,7 @@ interface CanvasNodeCardProps {
   onSelect: (node: CanvasNode, e: React.MouseEvent) => void;
   onStartConnect: (node: CanvasNode, e: React.MouseEvent) => void;
   onDragStart: (node: CanvasNode, e: React.MouseEvent) => void;
+  onCreateLoopback?: (node: CanvasNode, e: React.MouseEvent) => void;
 }
 
 export const CanvasNodeCard: React.FC<CanvasNodeCardProps> = ({
@@ -35,6 +37,7 @@ export const CanvasNodeCard: React.FC<CanvasNodeCardProps> = ({
   onSelect,
   onStartConnect,
   onDragStart,
+  onCreateLoopback,
 }) => {
   // Status Colors per prompt:
   // Managed: 🟢 Green
@@ -191,6 +194,20 @@ export const CanvasNodeCard: React.FC<CanvasNodeCardProps> = ({
             )}
           </div>
         </div>
+
+        {/* Hover Loopback Port Redirect Initiator (A --- 8080:80 ---> A) */}
+        {onCreateLoopback && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onCreateLoopback(node, e);
+            }}
+            className="absolute -top-2.5 right-6 w-6 h-6 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg border border-indigo-400/40 z-30"
+            title={`Add Loopback / Port Redirect on ${node.label} (${node.label} --- 8080:80 ---> ${node.label})`}
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         {/* Hover Port/Connection Initiator Quick Action */}
         <button

@@ -581,15 +581,36 @@ export default function App() {
     fetchRouterAudit();
     fetchCameras();
 
-    // Check First Run: trigger guided configuration wizard if not completed
-    try {
-      const firstRunDone = localStorage.getItem("netsentinel_first_run_completed");
-      if (!firstRunDone) {
+    // Check First Run: only run the guided setup wizard the very first time NetFling/NetSentinel
+    // is ever run on this computer, NOT on every page reload or app restart.
+    const checkFirstRunEligibility = async () => {
+      try {
+        const localFlag = localStorage.getItem("netsentinel_first_run_completed");
+        if (localFlag === "true") {
+          return; // Already completed or dismissed on this computer
+        }
+
+        // Query backend persistent database state
+        const res = await fetch("/api/first-run/status");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.first_run_completed || (typeof data.device_count === "number" && data.device_count > 0)) {
+            // Machine database is already initialized or contains existing inventory
+            try {
+              localStorage.setItem("netsentinel_first_run_completed", "true");
+            } catch {}
+            return;
+          }
+        }
+
+        // Only launch if genuinely pristine first execution on this computer
         setShowGuidedConfig(true);
+      } catch {
+        // Fallback: do not pop up unexpectedly on network or storage errors
       }
-    } catch {
-      // ignore
-    }
+    };
+
+    checkFirstRunEligibility();
   }, []);
 
   // Trigger Subnet Scan with Live Status Display
@@ -3214,6 +3235,7 @@ export default function App() {
             <SettingsView
               showToast={showToast}
               onRefreshDevices={fetchDevices}
+              onOpenGuidedSetup={() => setShowGuidedConfig(true)}
             />
           )}
 
@@ -3503,9 +3525,19 @@ export default function App() {
       {/* GUIDED CONFIG WIZARD MODAL */}
       <GuidedConfigModal
         isOpen={showGuidedConfig}
-        onClose={() => setShowGuidedConfig(false)}
+        onClose={() => {
+          setShowGuidedConfig(false);
+          try {
+            localStorage.setItem("netsentinel_first_run_completed", "true");
+            fetch("/api/first-run/complete", { method: "POST" }).catch(() => {});
+          } catch {}
+        }}
         onComplete={() => {
           setShowGuidedConfig(false);
+          try {
+            localStorage.setItem("netsentinel_first_run_completed", "true");
+            fetch("/api/first-run/complete", { method: "POST" }).catch(() => {});
+          } catch {}
           fetchStatus();
           fetchDevices();
         }}

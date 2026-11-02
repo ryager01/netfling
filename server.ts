@@ -405,6 +405,7 @@ net_info = discovery.detect_network_environment()
 devices = db.get_all_devices()
 alerts = db.get_alerts(limit=50, unresolved_only=True)
 speedtest = db.get_latest_speed_test()
+first_run_done = db.is_first_run_completed()
 
 data = {
     "network": net_info,
@@ -413,6 +414,7 @@ data = {
     "trusted_count": sum(1 for d in devices if d.get("is_trusted") == 1),
     "unresolved_alerts": len(alerts),
     "latest_speed_test": speedtest,
+    "first_run_completed": first_run_done,
     "daemon_running": False
 }
 print(json.dumps(data))
@@ -592,6 +594,9 @@ for p in port_scans:
 for d in all_db_devices:
     d["open_ports"] = ports_by_ip.get(d["ip"], [])
 
+# Permanently persist that first-run discovery has completed on this computer
+db.mark_first_run_completed(True)
+
 result = {
     "success": True,
     "subnets_scanned": subnets,
@@ -599,6 +604,7 @@ result = {
     "total_inventory": len(all_db_devices),
     "cameras_identified": len(cameras),
     "port_scans_performed": perform_port_scans,
+    "first_run_completed": True,
     "devices": all_db_devices,
     "cameras": cameras,
 }
@@ -609,6 +615,63 @@ print(json.dumps(result))
     res.json(parseJsonSafe(output));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// 3d. First-Run State Management (Prevents setup from re-running on every start)
+app.get("/api/first-run/status", async (req, res) => {
+  try {
+    const output = await runPythonScript([
+      "-c",
+      `
+import json
+from netsentinel.db import DatabaseEngine
+db = DatabaseEngine()
+print(json.dumps({
+    "first_run_completed": db.is_first_run_completed(),
+    "device_count": len(db.get_all_devices())
+}))
+      `,
+    ]);
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.json({ first_run_completed: true, device_count: 0, error: err.message });
+  }
+});
+
+app.post("/api/first-run/complete", async (req, res) => {
+  try {
+    const output = await runPythonScript([
+      "-c",
+      `
+import json
+from netsentinel.db import DatabaseEngine
+db = DatabaseEngine()
+db.mark_first_run_completed(True)
+print(json.dumps({"success": True, "first_run_completed": True}))
+      `,
+    ]);
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/first-run/reset", async (req, res) => {
+  try {
+    const output = await runPythonScript([
+      "-c",
+      `
+import json
+from netsentinel.db import DatabaseEngine
+db = DatabaseEngine()
+db.mark_first_run_completed(False)
+print(json.dumps({"success": True, "first_run_completed": False}))
+      `,
+    ]);
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

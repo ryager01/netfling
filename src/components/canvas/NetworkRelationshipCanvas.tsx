@@ -9,10 +9,12 @@ import {
 import { CanvasViewport } from "./CanvasViewport";
 import { AssetCatalogSidebar } from "./AssetCatalogSidebar";
 import { RelationshipPropertiesDrawer } from "./RelationshipPropertiesDrawer";
+import { NodePropertiesDrawer } from "./NodePropertiesDrawer";
 import { AIPolicyCommandBar } from "./AIPolicyCommandBar";
 import { ComplianceAuditModal } from "./ComplianceAuditModal";
 import { AgentDeploymentModal } from "./AgentDeploymentModal";
 import { ExportRulesModal } from "./ExportRulesModal";
+import { ArchitectureBlueprintModal } from "./ArchitectureBlueprintModal";
 import {
   Shield,
   Layers,
@@ -27,6 +29,7 @@ import {
   Activity,
   AlertOctagon,
   Info,
+  BookOpen,
 } from "lucide-react";
 
 interface NetworkRelationshipCanvasProps {
@@ -57,9 +60,11 @@ export const NetworkRelationshipCanvas: React.FC<NetworkRelationshipCanvasProps>
   // Drawer / Modals State
   const [isCatalogOpen, setIsCatalogOpen] = useState<boolean>(false);
   const [isPropertiesOpen, setIsPropertiesOpen] = useState<boolean>(false);
+  const [isNodeDrawerOpen, setIsNodeDrawerOpen] = useState<boolean>(false);
   const [isComplianceOpen, setIsComplianceOpen] = useState<boolean>(false);
   const [isAgentModalOpen, setIsAgentModalOpen] = useState<boolean>(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const [isBlueprintOpen, setIsBlueprintOpen] = useState<boolean>(false);
   const [showAiBar, setShowAiBar] = useState<boolean>(true);
 
   // Loading & Enforcing State
@@ -297,6 +302,7 @@ export const NetworkRelationshipCanvas: React.FC<NetworkRelationshipCanvasProps>
       setNodes((prev) => prev.filter((n) => n.id !== id));
       setRelationships((prev) => prev.filter((r) => r.sourceId !== id && r.targetId !== id));
       setSelectedNode(null);
+      setIsNodeDrawerOpen(false);
       showNotification(`Deleted node: ${selectedNode.label}`);
 
       try {
@@ -307,6 +313,31 @@ export const NetworkRelationshipCanvas: React.FC<NetworkRelationshipCanvasProps>
       }
     } else if (selectedRelationship) {
       handleDeleteRelationship(selectedRelationship.id);
+    }
+  };
+
+  // Save Node from Node Properties Drawer
+  const handleSaveNode = async (updated: CanvasNode) => {
+    setNodes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+    setSelectedNode(updated);
+    setIsNodeDrawerOpen(false);
+    showNotification(`Updated node: ${updated.label}`);
+
+    try {
+      await fetch("/api/canvas/nodes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...updated,
+          node_type: updated.type || updated.node_type || "managed_device",
+          ip_or_cidr: updated.ip || updated.ip_or_cidr || "",
+          pos_x: updated.x,
+          pos_y: updated.y,
+        }),
+      });
+      fetchCompliance();
+    } catch (err) {
+      console.error("Failed to update node", err);
     }
   };
 
@@ -524,6 +555,15 @@ export const NetworkRelationshipCanvas: React.FC<NetworkRelationshipCanvasProps>
             <span>Export Rules</span>
           </button>
 
+          <button
+            onClick={() => setIsBlueprintOpen(true)}
+            className="px-3 py-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 hover:border-purple-500/60 text-purple-200 font-semibold text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+            title="View Full Architecture, Component Tree, Protocols, and Sequence Diagrams"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-purple-400" />
+            <span>Blueprint</span>
+          </button>
+
           {/* Re-layout preset button */}
           <button
             onClick={() => handleApplyLayout("hierarchical")}
@@ -571,13 +611,19 @@ export const NetworkRelationshipCanvas: React.FC<NetworkRelationshipCanvasProps>
               if (node) {
                 setSelectedRelationship(null);
                 setIsPropertiesOpen(false);
+                setIsNodeDrawerOpen(true);
+              } else {
+                setIsNodeDrawerOpen(false);
               }
             }}
             onSelectRelationship={(rel) => {
               setSelectedRelationship(rel);
               setSelectedNode(null);
+              setIsNodeDrawerOpen(false);
               if (rel) {
                 setIsPropertiesOpen(true);
+              } else {
+                setIsPropertiesOpen(false);
               }
             }}
             onUpdateNodePosition={handleUpdateNodePosition}
@@ -595,6 +641,19 @@ export const NetworkRelationshipCanvas: React.FC<NetworkRelationshipCanvasProps>
           onClose={() => setIsPropertiesOpen(false)}
           onSave={handleSaveRelationship}
           onDelete={handleDeleteRelationship}
+        />
+
+        {/* Right Side Node Properties Panel */}
+        <NodePropertiesDrawer
+          isOpen={isNodeDrawerOpen}
+          node={selectedNode}
+          onClose={() => setIsNodeDrawerOpen(false)}
+          onSave={handleSaveNode}
+          onDelete={() => handleDeleteSelected()}
+          groups={groups}
+          relationships={relationships}
+          nodes={nodes}
+          agents={agents}
         />
       </div>
 
@@ -616,6 +675,11 @@ export const NetworkRelationshipCanvas: React.FC<NetworkRelationshipCanvasProps>
       <ExportRulesModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
+      />
+
+      <ArchitectureBlueprintModal
+        isOpen={isBlueprintOpen}
+        onClose={() => setIsBlueprintOpen(false)}
       />
     </div>
   );

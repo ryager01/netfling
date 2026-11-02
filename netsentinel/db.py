@@ -613,6 +613,22 @@ class DatabaseEngine:
 
         return self.get_settings()
 
+    def is_first_run_completed(self) -> bool:
+        """Checks if first-run setup has already run on this computer or if devices exist."""
+        settings = self.get_settings()
+        if settings.get("first_run_completed") is True:
+            return True
+        # If devices are already present in inventory, first-run discovery has already executed
+        devices = self.get_all_devices()
+        if len(devices) > 0:
+            return True
+        return False
+
+    def mark_first_run_completed(self, completed: bool = True) -> bool:
+        """Marks or clears first-run setup status in persistent settings."""
+        self.save_settings({"first_run_completed": completed})
+        return True
+
     def create_database_backup(self, custom_backup_dir: Optional[str] = None) -> Dict[str, Any]:
         """Creates an instant timestamped backup of the database and settings."""
         settings = self.get_settings()

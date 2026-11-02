@@ -10,6 +10,11 @@ export interface FirewallRuleObject {
   action: "allow" | "deny";
   protocol: "tcp" | "udp" | "icmp" | "any";
   localPorts?: string[];
+  presentedPort?: string;
+  actualPort?: string;
+  isRedirect?: boolean;
+  isLoopback?: boolean;
+  destinationAddress?: string;
   remoteAddresses?: string[];
   stateful: boolean;
   logging: boolean;

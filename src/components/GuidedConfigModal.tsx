@@ -263,15 +263,28 @@ export function GuidedConfigModal({
     }
   };
 
-  // Complete & Save First Run Flag
+  // Complete & Save First Run Flag permanently
   const handleFinish = () => {
     try {
       localStorage.setItem("netsentinel_first_run_completed", "true");
     } catch {
       // ignore
     }
+    fetch("/api/first-run/complete", { method: "POST" }).catch(() => {});
     showToast("First-run guided configuration completed!");
     onComplete();
+    onClose();
+  };
+
+  // Dismiss and permanently prevent auto-run on future app starts
+  const handleDismiss = () => {
+    try {
+      localStorage.setItem("netsentinel_first_run_completed", "true");
+    } catch {
+      // ignore
+    }
+    fetch("/api/first-run/complete", { method: "POST" }).catch(() => {});
+    showToast("Guided setup dismissed. You can relaunch it anytime via 'Guided Setup' in the header.");
     onClose();
   };
 
@@ -302,9 +315,9 @@ export function GuidedConfigModal({
           </div>
 
           <button
-            onClick={onClose}
+            onClick={handleDismiss}
             className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-            title="Close Setup Wizard"
+            title="Close Setup Wizard (will not show again on startup)"
           >
             <X className="w-5 h-5" />
           </button>
@@ -467,18 +480,29 @@ export function GuidedConfigModal({
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-2">
-                <span className="text-xs text-slate-500 font-mono">
-                  {selectedSubnets.length} subnet(s) queued for discovery
-                </span>
-
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-800/80">
                 <button
-                  onClick={handleStartSweep}
-                  className="px-6 py-2.5 bg-cyan-400 hover:bg-cyan-300 text-slate-950 text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg transition-transform hover:scale-105"
+                  type="button"
+                  onClick={handleDismiss}
+                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 rounded-xl transition-colors border border-transparent hover:border-slate-700 text-left sm:text-center"
+                  title="Dismiss setup and do not run on startup. Relaunchable anytime via the top bar."
                 >
-                  <Play className="w-4 h-4 fill-current" />
-                  <span>Begin Guided Sweep</span>
+                  Skip for Now (Do not run on startup)
                 </button>
+
+                <div className="flex items-center justify-between sm:justify-end gap-4">
+                  <span className="text-xs text-slate-500 font-mono">
+                    {selectedSubnets.length} subnet(s) queued
+                  </span>
+
+                  <button
+                    onClick={handleStartSweep}
+                    className="px-6 py-2.5 bg-cyan-400 hover:bg-cyan-300 text-slate-950 text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg transition-transform hover:scale-105"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    <span>Begin Guided Sweep</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

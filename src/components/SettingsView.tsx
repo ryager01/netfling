@@ -29,11 +29,13 @@ import {
   Radio,
   ArrowRight,
   AlertTriangle,
+  Compass,
 } from "lucide-react";
 
 interface SettingsViewProps {
   showToast: (msg: string) => void;
   onRefreshDevices?: () => void;
+  onOpenGuidedSetup?: () => void;
 }
 
 interface BackupItem {
@@ -44,7 +46,11 @@ interface BackupItem {
   created_at: string;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ showToast, onRefreshDevices }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({
+  showToast,
+  onRefreshDevices,
+  onOpenGuidedSetup,
+}) => {
   const [activeTab, setActiveTab] = useState<"network" | "email" | "threads" | "storage" | "backup">("network");
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -250,6 +256,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ showToast, onRefresh
       showToast(`Email test error: ${err.message}`);
     } finally {
       setIsTestingEmail(false);
+    }
+  };
+
+  const handleResetFirstRun = async () => {
+    try {
+      localStorage.removeItem("netsentinel_first_run_completed");
+      await fetch("/api/first-run/reset", { method: "POST" });
+      showToast("First-run flag cleared! Setup wizard will auto-launch next time the application opens.");
+    } catch {
+      showToast("Failed to reset first run flag.");
     }
   };
 
@@ -767,6 +783,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ showToast, onRefresh
                   </div>
                 </div>
               )}
+
+              {/* First-Run Guided Setup Configuration Card */}
+              <div className="pt-4 border-t border-slate-800/80 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Compass className="w-4 h-4 text-cyan-400" />
+                      <h4 className="text-xs font-bold text-white tracking-tight">
+                        First-Run Guided Setup Execution
+                      </h4>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        First-Time Only Lock Active
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 max-w-2xl">
+                      NetFling Sentinel's guided discovery wizard is designed to run automatically only the very first time the application runs on this computer. It is permanently bypassed on subsequent reloads and app restarts to prevent workflow interruptions.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                  {onOpenGuidedSetup && (
+                    <button
+                      type="button"
+                      onClick={onOpenGuidedSetup}
+                      className="px-3.5 py-1.5 text-xs font-semibold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 rounded-lg transition-colors flex items-center gap-1.5"
+                    >
+                      <Compass className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Relaunch Guided Setup Wizard</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleResetFirstRun}
+                    className="px-3.5 py-1.5 text-xs font-semibold bg-slate-900 hover:bg-slate-850 text-slate-300 hover:text-white border border-slate-700 hover:border-amber-500/40 rounded-lg transition-colors flex items-center gap-1.5"
+                    title="Clear completion flags to trigger automatic guided setup on the next app startup"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Reset First-Run Startup Flag</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

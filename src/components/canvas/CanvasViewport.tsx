@@ -113,9 +113,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const handleNodeDragStart = (node: CanvasNode, e: React.MouseEvent) => {
     e.stopPropagation();
     if (connectingSource) {
-      if (connectingSource.id !== node.id) {
-        onCreateRelationship(connectingSource.id, node.id);
-      }
+      onCreateRelationship(connectingSource.id, node.id);
       setConnectingSource(null);
       return;
     }
@@ -156,6 +154,28 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const nodeMap = new Map<string, CanvasNode>();
   nodes.forEach((n) => nodeMap.set(n.id, n));
 
+  // Compute visual group bounding boxes (Visio / ERD container enclosures)
+  const groupBoundaries = groups
+    .map((g) => {
+      const memberNodes = nodes.filter(
+        (n) => n.groupId === g.id || n.group_id === g.id || (n.groupName && n.groupName === g.name)
+      );
+      if (memberNodes.length === 0) return null;
+      const minX = Math.min(...memberNodes.map((n) => n.x)) - 24;
+      const minY = Math.min(...memberNodes.map((n) => n.y)) - 38;
+      const maxX = Math.max(...memberNodes.map((n) => n.x + 240)) + 24;
+      const maxY = Math.max(...memberNodes.map((n) => n.y + 110)) + 24;
+      return {
+        group: g,
+        minX,
+        minY,
+        width: Math.max(maxX - minX, 290),
+        height: Math.max(maxY - minY, 160),
+        memberCount: memberNodes.length,
+      };
+    })
+    .filter(Boolean);
+
   return (
     <div
       ref={containerRef}
@@ -182,26 +202,97 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       >
         {/* SVG Relationship Edge Layer */}
         <svg className="absolute inset-0 w-[8000px] h-[8000px] overflow-visible pointer-events-auto">
-          {/* Render All Relationships */}
-          {relationships.map((rel) => {
-            const src = nodeMap.get(rel.sourceId);
-            const dst = nodeMap.get(rel.targetId);
-            if (!src || !dst) return null;
+          {/* Render Group Enclosures (Visio / Topology Containers) */}
+          {groupBoundaries.map((gb) => {
+            if (!gb) return null;
+            const color = gb.group.color || "#06b6d4";
             return (
-              <CanvasRelationshipEdge
-                key={rel.id}
-                relationship={rel}
-                sourceNode={src}
-                targetNode={dst}
-                isSelected={selectedRelationship?.id === rel.id}
-                onSelect={(r) => {
-                  onSelectRelationship(r);
-                  onSelectNode(null);
-                }}
-                scale={scale}
-              />
+              <g key={`enclosure-${gb.group.id}`} className="transition-all duration-200">
+                {/* Background Boundary Box */}
+                <rect
+                  x={gb.minX}
+                  y={gb.minY}
+                  width={gb.width}
+                  height={gb.height}
+                  rx="16"
+                  fill={color}
+                  fillOpacity="0.04"
+                  stroke={color}
+                  strokeOpacity="0.3"
+                  strokeWidth="1.5"
+                  strokeDasharray="6,4"
+                />
+                {/* Group Title Badge */}
+                <g transform={`translate(${gb.minX + 16}, ${gb.minY - 12})`}>
+                  <rect
+                    x="0"
+                    y="0"
+                    width={Math.min(gb.group.name.length * 8 + 60, 240)}
+                    height="24"
+                    rx="6"
+                    className="fill-slate-900 stroke-slate-800"
+                    strokeWidth="1"
+                    filter="drop-shadow(0 2px 4px rgba(0,0,0,0.5))"
+                  />
+                  <circle cx="12" cy="12" r="4" fill={color} />
+                  <text
+                    x="22"
+                    y="15"
+                    className="fill-slate-200 font-mono text-[10px] font-bold tracking-tight"
+                  >
+                    {gb.group.name}
+                  </text>
+                  <text
+                    x={Math.min(gb.group.name.length * 8 + 48, 228)}
+                    y="15"
+                    className="fill-slate-500 font-mono text-[9px]"
+                  >
+                    ({gb.memberCount})
+                  </text>
+                </g>
+              </g>
             );
           })}
+
+          {/* Render All Relationships with Fan-in/Fan-out Parallel Edge Curvature */}
+          {(() => {
+            const pairCountMap = new Map<string, number>();
+            const pairSeenMap = new Map<string, number>();
+
+            // First pass: count total edges between each node pair
+            relationships.forEach((rel) => {
+              const pairKey = [rel.sourceId, rel.targetId].sort().join("::");
+              pairCountMap.set(pairKey, (pairCountMap.get(pairKey) || 0) + 1);
+            });
+
+            return relationships.map((rel) => {
+              const src = nodeMap.get(rel.sourceId);
+              const dst = nodeMap.get(rel.targetId);
+              if (!src || !dst) return null;
+
+              const pairKey = [rel.sourceId, rel.targetId].sort().join("::");
+              const totalParallel = pairCountMap.get(pairKey) || 1;
+              const currentIdx = pairSeenMap.get(pairKey) || 0;
+              pairSeenMap.set(pairKey, currentIdx + 1);
+
+              return (
+                <CanvasRelationshipEdge
+                  key={rel.id}
+                  relationship={rel}
+                  sourceNode={src}
+                  targetNode={dst}
+                  isSelected={selectedRelationship?.id === rel.id}
+                  edgeIndex={currentIdx}
+                  totalParallelEdges={totalParallel}
+                  onSelect={(r) => {
+                    onSelectRelationship(r);
+                    onSelectNode(null);
+                  }}
+                  scale={scale}
+                />
+              );
+            });
+          })()}
 
           {/* Interactive Dragging Guide Line when creating relationship */}
           {connectingSource && (
@@ -226,7 +317,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
               node={node}
               isSelected={selectedNode?.id === node.id}
               onSelect={(n) => {
-                if (connectingSource && connectingSource.id !== n.id) {
+                if (connectingSource) {
                   onCreateRelationship(connectingSource.id, n.id);
                   setConnectingSource(null);
                 } else {
@@ -236,6 +327,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
               }}
               onStartConnect={handleStartConnect}
               onDragStart={handleNodeDragStart}
+              onCreateLoopback={(n) => onCreateRelationship(n.id, n.id)}
             />
           ))}
         </div>

@@ -44,10 +44,15 @@ export const RelationshipPropertiesDrawer: React.FC<RelationshipPropertiesDrawer
   const [ids, setIds] = useState<boolean>(true);
   const [schedule, setSchedule] = useState<string>("Always");
   const [aiNotes, setAiNotes] = useState<string>("");
+  const [trafficState, setTrafficState] = useState<
+    "expected" | "high" | "new" | "threat" | "inactive"
+  >("expected");
   const [previewPlatform, setPreviewPlatform] = useState<
     "windows_firewall" | "nftables" | "iptables" | "ufw" | "pf"
   >("windows_firewall");
   const [isCopied, setIsCopied] = useState<boolean>(false);
+  const [presentedPortInput, setPresentedPortInput] = useState<string>("8080");
+  const [actualPortInput, setActualPortInput] = useState<string>("80");
 
   useEffect(() => {
     if (relationship) {
@@ -59,6 +64,11 @@ export const RelationshipPropertiesDrawer: React.FC<RelationshipPropertiesDrawer
       setLogging(relationship.logging);
       setIds(relationship.ids);
       setSchedule(relationship.schedule || "Always");
+      setTrafficState(
+        (relationship.trafficState as any) ||
+          (relationship.traffic_status === "new_comm" ? "new" : relationship.traffic_status) ||
+          "expected"
+      );
       setAiNotes(
         relationship.aiNotes ||
           `Permit ${relationship.protocol.toUpperCase()} traffic on ports [${relationship.ports.join(
@@ -87,23 +97,44 @@ export const RelationshipPropertiesDrawer: React.FC<RelationshipPropertiesDrawer
       ids,
       schedule,
       aiNotes,
+      trafficState,
+      traffic_status: trafficState === "new" ? "new_comm" : (trafficState as any),
     };
     onSave(updated);
   };
 
   // Generate real-time translation preview
   const generateLiveCode = () => {
-    const srcIp = sourceNode?.ip || "any";
-    const dstIp = targetNode?.ip || "any";
+    const isLoopback = sourceNode?.id === targetNode?.id;
+    const srcIp = sourceNode?.ip || (isLoopback ? "127.0.0.1" : "any");
+    const dstIp = targetNode?.ip || (isLoopback ? "127.0.0.1" : "any");
     const portStr = portsInput || "443";
-    const cleanPorts = portStr.split(",").map((p) => p.trim());
+    const cleanPorts = portStr.split(",").map((p) => p.trim()).filter(Boolean);
     const ruleName = `NRC_${sourceNode?.label.replace(/\s+/g, "_")}_to_${targetNode?.label.replace(
       /\s+/g,
       "_"
-    )}_${cleanPorts.join("_")}`;
+    )}_${cleanPorts.map((p) => p.replace(":", "_to_")).join("_")}`;
+
+    // Detect if any port has the redirect operator ':'
+    const hasRedirect = cleanPorts.some((p) => p.includes(":"));
 
     switch (previewPlatform) {
       case "windows_firewall":
+        if (hasRedirect) {
+          const redirectCommands = cleanPorts
+            .filter((p) => p.includes(":"))
+            .map((p) => {
+              const [presPort, actPort] = p.split(":").map((x) => x.trim());
+              const listenAddr = isLoopback ? "127.0.0.1" : srcIp === "any" ? "0.0.0.0" : srcIp;
+              const connAddr = isLoopback ? "127.0.0.1" : dstIp === "any" ? "127.0.0.1" : dstIp;
+              return `# Windows PortProxy Redirect (${p})
+netsh interface portproxy add v4tov4 listenport=${presPort} listenaddress=${listenAddr} connectport=${actPort} connectaddress=${connAddr}
+netsh advfirewall firewall add rule name="${ruleName}_NAT_${presPort}" dir=in action=allow protocol=${protocol} localport=${presPort} enable=yes`;
+            })
+            .join("\n");
+          return redirectCommands;
+        }
+
         if (direction === "bidirectional") {
           return `# Inbound & Outbound Bidirectional Trust
 netsh advfirewall firewall add rule name="${ruleName}_IN" dir=in action=allow protocol=${protocol} localport=${cleanPorts.join(
@@ -119,6 +150,30 @@ netsh advfirewall firewall add rule name="${ruleName}" dir=in action=allow proto
         )} remoteip=${srcIp} enable=yes`;
 
       case "nftables":
+        if (hasRedirect) {
+          return cleanPorts
+            .map((p) => {
+              if (p.includes(":")) {
+                const [pres, act] = p.split(":").map((x) => x.trim());
+                if (isLoopback) {
+                  return `# nftables Localhost Loopback Redirect (${p})
+table inet nrc_nat {
+  chain prerouting { type nat hook prerouting priority dstnat; policy accept;
+    iif "lo" ${protocol} dport ${pres} redirect to :${act}
+  }
+}`;
+                }
+                return `# nftables Destination NAT (${p})
+table inet nrc_nat {
+  chain prerouting { type nat hook prerouting priority dstnat; policy accept;
+    ip daddr ${dstIp} ${protocol} dport ${pres} dnat to ${dstIp}:${act}
+  }
+}`;
+              }
+              return `table inet filter { chain forward { ip saddr ${srcIp} ip daddr ${dstIp} ${protocol} dport ${p} accept } }`;
+            })
+            .join("\n");
+        }
         return `# Generated nftables rule
 table inet filter {
   chain forward {
@@ -129,16 +184,70 @@ table inet filter {
 }`;
 
       case "iptables":
+        if (hasRedirect) {
+          return cleanPorts
+            .map((p) => {
+              if (p.includes(":")) {
+                const [pres, act] = p.split(":").map((x) => x.trim());
+                if (isLoopback) {
+                  return `# iptables Loopback Redirect (${p})
+iptables -t nat -A PREROUTING -p ${protocol} --dport ${pres} -j REDIRECT --to-ports ${act}
+iptables -t nat -A OUTPUT -p ${protocol} -o lo --dport ${pres} -j REDIRECT --to-ports ${act}
+iptables -A INPUT -p ${protocol} --dport ${act} -m state --state NEW,ESTABLISHED -j ACCEPT`;
+                }
+                return `# iptables Destination NAT Port Forward (${p})
+iptables -t nat -A PREROUTING -p ${protocol} -d ${dstIp} --dport ${pres} -j DNAT --to-destination ${dstIp}:${act}
+iptables -A FORWARD -p ${protocol} -d ${dstIp} --dport ${act} -m state --state NEW,ESTABLISHED -j ACCEPT`;
+              }
+              return `iptables -A FORWARD -s ${srcIp} -d ${dstIp} -p ${protocol} --dport ${p} -m state --state NEW,ESTABLISHED -j ACCEPT`;
+            })
+            .join("\n");
+        }
         return `# Generated iptables rule
 iptables -A FORWARD -s ${srcIp} -d ${dstIp} -p ${protocol} -m multiport --dports ${cleanPorts.join(
           ","
         )} -m state --state NEW,ESTABLISHED -j ACCEPT`;
 
       case "ufw":
+        if (hasRedirect) {
+          return cleanPorts
+            .map((p) => {
+              if (p.includes(":")) {
+                const [pres, act] = p.split(":").map((x) => x.trim());
+                return `# /etc/ufw/before.rules NAT translation (${p})
+*nat
+:PREROUTING ACCEPT [0:0]
+-A PREROUTING -p ${protocol} --dport ${pres} -j REDIRECT --to-ports ${act}
+COMMIT
+# UFW filter allow
+ufw allow ${act}/${protocol}`;
+              }
+              return `ufw allow proto ${protocol} from ${srcIp} to ${dstIp} port ${p}`;
+            })
+            .join("\n");
+        }
         return `# Generated UFW command
 ufw allow proto ${protocol} from ${srcIp} to ${dstIp} port ${cleanPorts.join(",")}`;
 
       case "pf":
+        if (hasRedirect) {
+          return cleanPorts
+            .map((p) => {
+              if (p.includes(":")) {
+                const [pres, act] = p.split(":").map((x) => x.trim());
+                if (isLoopback) {
+                  return `# pf Loopback Redirect (/etc/pf.conf)
+rdr on lo0 inet proto ${protocol} from any to 127.0.0.1 port ${pres} -> 127.0.0.1 port ${act}
+pass in quick on lo0 proto ${protocol} to 127.0.0.1 port ${act} keep state`;
+                }
+                return `# pf Inbound Port Redirection (${p})
+rdr on egress inet proto ${protocol} from any to ${dstIp} port ${pres} -> ${dstIp} port ${act}
+pass in quick proto ${protocol} to ${dstIp} port ${act} keep state`;
+              }
+              return `pass in quick proto ${protocol} from ${srcIp} to ${dstIp} port ${p} keep state`;
+            })
+            .join("\n");
+        }
         return `# Generated BSD/macOS pf rule
 pass in quick proto ${protocol} from ${srcIp} to ${dstIp} port { ${cleanPorts.join(
           ", "
@@ -169,6 +278,44 @@ pass in quick proto ${protocol} from ${srcIp} to ${dstIp} port { ${cleanPorts.jo
 
       {/* Drawer Scrollable Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+        {/* Compact Line Notation Preview Banner (NRC Specification) */}
+        {(() => {
+          const isLoopback = sourceNode?.id === targetNode?.id;
+          const srcName = sourceNode?.label || "A";
+          const dstName = targetNode?.label || "B";
+          const portLabel = portsInput.trim() || "443";
+          const dynamicSuffix = triggeredPorts ? `\n[${triggeredPorts}]` : "";
+          let lineNotation = `${srcName} --- ${portLabel} ---> ${dstName}${dynamicSuffix}`;
+          if (isLoopback) {
+            lineNotation = `${srcName} --- ${portLabel} ---> ${dstName} [Loopback Intra-Host]${dynamicSuffix}`;
+          } else if (direction === "bidirectional") {
+            lineNotation = `${srcName} <==== ${portLabel} ====> ${dstName}${dynamicSuffix}`;
+          } else if (direction === "reverse") {
+            lineNotation = `${srcName} <--- ${portLabel} --- ${dstName}${dynamicSuffix}`;
+          }
+
+          return (
+            <div className="p-2.5 rounded-xl bg-slate-950 border border-cyan-500/30 shadow-inner">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-mono uppercase text-cyan-400 font-bold tracking-wider">
+                  NRC Compact Line Notation
+                </span>
+                {isLoopback && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-bold">
+                    ⟲ Loopback
+                  </span>
+                )}
+              </div>
+              <div className="font-mono text-xs text-white bg-slate-900/90 rounded p-2 border border-slate-800 break-all select-all">
+                {lineNotation}
+              </div>
+              <p className="text-[9px] text-slate-400 mt-1">
+                Authoritative representation; firewall rules and NAT mappings derive directly from this line.
+              </p>
+            </div>
+          );
+        })()}
+
         {/* Source & Destination Summary */}
         <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800/80 space-y-2">
           <div className="flex items-center justify-between">
@@ -241,21 +388,96 @@ pass in quick proto ${protocol} from ${srcIp} to ${dstIp} port { ${cleanPorts.jo
           </div>
         </div>
 
-        {/* Allowed Ports */}
+        {/* Allowed Ports & Port Redirect Operator (:) */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] font-medium text-slate-300">Allowed Ports</label>
-            <span className="text-[10px] font-mono text-slate-500">Comma-separated</span>
+            <label className="text-[11px] font-medium text-slate-300">Allowed Ports & Redirects</label>
+            <span className="text-[10px] font-mono text-cyan-400">PresentedPort:ActualPort</span>
           </div>
           <input
             type="text"
             value={portsInput}
             onChange={(e) => setPortsInput(e.target.value)}
-            placeholder="443, 80"
+            placeholder="80, 443, 8080:80"
             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500"
           />
-          {/* Quick presets */}
+
+          {/* Port Redirect Operator Builder */}
+          <div className="mt-2.5 p-2 rounded-lg bg-slate-950/80 border border-indigo-500/30">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10px] font-semibold text-indigo-300 flex items-center gap-1">
+                <span>Port Redirect Operator (:)</span>
+              </span>
+              <span className="text-[9px] font-mono text-slate-400">NAT Translation</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <span className="text-[9px] font-mono text-slate-500 block mb-0.5">Presented (Origin)</span>
+                <input
+                  type="text"
+                  value={presentedPortInput}
+                  onChange={(e) => setPresentedPortInput(e.target.value)}
+                  placeholder="8080"
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-indigo-300"
+                />
+              </div>
+              <span className="text-slate-500 font-mono text-sm pt-3">:</span>
+              <div className="flex-1">
+                <span className="text-[9px] font-mono text-slate-500 block mb-0.5">Actual (Target)</span>
+                <input
+                  type="text"
+                  value={actualPortInput}
+                  onChange={(e) => setActualPortInput(e.target.value)}
+                  placeholder="80"
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-emerald-300"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (presentedPortInput && actualPortInput) {
+                    const newMapping = `${presentedPortInput.trim()}:${actualPortInput.trim()}`;
+                    const current = portsInput.trim();
+                    setPortsInput(current ? `${current}, ${newMapping}` : newMapping);
+                  }
+                }}
+                className="mt-3.5 px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold transition-colors"
+                title="Append port redirect to relationship"
+              >
+                + Insert
+              </button>
+            </div>
+
+            {/* Quick Redirect Presets */}
+            <div className="flex items-center gap-1 mt-2 flex-wrap text-[9px] font-mono">
+              <span className="text-slate-500 text-[9px] mr-1">Presets:</span>
+              {[
+                { label: "8080:80", desc: "HTTP Proxy" },
+                { label: "443:8443", desc: "HTTPS" },
+                { label: "8443:8080", desc: "Reverse Proxy" },
+                { label: "25:2525", desc: "Mail" },
+                { label: "53:5353", desc: "DNS" },
+                { label: "80:8080", desc: "Loopback" },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => {
+                    const current = portsInput.trim();
+                    setPortsInput(current ? `${current}, ${preset.label}` : preset.label);
+                  }}
+                  className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-indigo-500/20 transition-colors"
+                  title={`${preset.desc} redirect (${preset.label})`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Standard Port Presets */}
           <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+            <span className="text-[10px] text-slate-500 mr-1">Direct:</span>
             {["443", "80, 443", "22", "53", "3389", "5432"].map((preset) => (
               <button
                 key={preset}
@@ -351,6 +573,39 @@ pass in quick proto ${protocol} from ${srcIp} to ${dstIp} port { ${cleanPorts.jo
               <span className="text-[10px] uppercase font-mono font-bold">IDS / IPS</span>
               <span className="text-xs font-semibold mt-0.5">{ids ? "Enabled" : "Off"}</span>
             </div>
+          </div>
+        </div>
+
+        {/* Real-Time Monitoring: Traffic State Simulation */}
+        <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-[11px] font-medium text-slate-300 block">
+              Real-Time Traffic Status
+            </label>
+            <span className="text-[10px] font-mono text-cyan-400">Live Particle Flow</span>
+          </div>
+          <div className="grid grid-cols-5 gap-1 text-[10px] font-mono">
+            {[
+              { id: "expected", label: "Expected", color: "text-emerald-400 bg-emerald-950/40 border-emerald-500/50" },
+              { id: "high", label: "High", color: "text-amber-400 bg-amber-950/40 border-amber-500/50" },
+              { id: "new", label: "New", color: "text-orange-400 bg-orange-950/40 border-orange-500/50" },
+              { id: "threat", label: "Threat", color: "text-red-400 bg-red-950/40 border-red-500/50 animate-pulse" },
+              { id: "inactive", label: "Inactive", color: "text-slate-400 bg-slate-900 border-slate-700" },
+            ].map((st) => (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => setTrafficState(st.id as any)}
+                className={`py-1.5 rounded-lg border text-center transition-all ${
+                  trafficState === st.id
+                    ? `${st.color} font-bold ring-1 ring-white/20 shadow-md`
+                    : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                }`}
+                title={`Set traffic flow animation to ${st.label}`}
+              >
+                {st.label}
+              </button>
+            ))}
           </div>
         </div>
 

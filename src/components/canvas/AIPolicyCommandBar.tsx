@@ -32,8 +32,10 @@ export const AIPolicyCommandBar: React.FC<AIPolicyCommandBarProps> = ({
   const samplePrompts = [
     "Allow workstations to access web servers on HTTPS only.",
     "Developers need SSH access to all Linux servers.",
-    "Bidirectional database replication between Postgres and DB Replica on 5432.",
-    "Allow Workstations DNS queries to Gateway on port 53 UDP.",
+    "Firewall --- 443:8443 ---> ReverseProxy",
+    "ReverseProxy --- 8443:8080 ---> WebApp",
+    "WebServer --- 80:8080 ---> WebServer",
+    "Redirect external port 8080 to internal 80 on WebApp",
   ];
 
   const handleExecuteIntent = async (textToRun?: string) => {
@@ -132,17 +134,22 @@ export const AIPolicyCommandBar: React.FC<AIPolicyCommandBarProps> = ({
 
         {/* Right: Quick Prompts Selector */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 shrink-0">
-          <span className="text-[10px] font-mono text-slate-500 shrink-0">Examples:</span>
-          {samplePrompts.slice(0, 2).map((sample, idx) => (
+          <span className="text-[10px] font-mono text-slate-500 shrink-0">Presets:</span>
+          {[
+            { label: "Workstations → Web (443)", text: samplePrompts[0] },
+            { label: "Devs → Linux (22)", text: samplePrompts[1] },
+            { label: "NAT 443:8443", text: samplePrompts[2] },
+            { label: "Loopback 80:8080", text: samplePrompts[4] },
+          ].map((item, idx) => (
             <button
               key={idx}
               onClick={() => {
-                setPrompt(sample);
-                handleExecuteIntent(sample);
+                setPrompt(item.text);
+                handleExecuteIntent(item.text);
               }}
-              className="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 text-[10px] whitespace-nowrap transition-colors"
+              className="px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-[10px] whitespace-nowrap transition-colors"
             >
-              {idx === 0 ? "Workstations → Web (443)" : "Devs → Linux (22)"}
+              {item.label}
             </button>
           ))}
         </div>

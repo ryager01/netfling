@@ -125,107 +125,186 @@ class FirewallRuleCompiler:
 
                     src_ip = src.get("ip_or_cidr") or src.get("label", "any")
                     tgt_ip = tgt.get("ip_or_cidr") or tgt.get("label", "any")
+                    is_loopback = (src["id"] == tgt["id"] or src_ip == tgt_ip or src_ip in ["127.0.0.1", "localhost", "lo"])
 
-                    # Generate Inbound on Target (One-Way or Bidirectional)
-                    ports_str = ",".join(str(p) for p in allowed_ports)
-                    rule_name = f"NRC-Rel-{rule_seq:03d}-{src['label'][:10]}-to-{tgt['label'][:10]}"
+                    # Process each allowed port specification (which may be direct "80" or redirect "8080:80")
+                    for port_item in allowed_ports:
+                        port_str = str(port_item).strip()
+                        if not port_str:
+                            continue
 
-                    # Windows Syntax
-                    win_cmd = (
-                        f'netsh advfirewall firewall add rule name="{rule_name}" '
-                        f'dir=in action=allow protocol={protocol.upper()} localport={ports_str} '
-                        f'remoteip={src_ip} profile=any enable=yes'
-                    )
-                    if logging:
-                        win_cmd += " description=\"NRC-Enforced;Logging=Active\""
+                        # Check for NRC Port Redirect Operator (:)
+                        if ":" in port_str:
+                            parts = port_str.split(":")
+                            presented_port = parts[0].strip()
+                            actual_port = parts[1].strip()
+                            is_redirect = True
+                        else:
+                            presented_port = port_str
+                            actual_port = port_str
+                            is_redirect = False
 
-                    # Linux nftables Syntax
-                    nft_state = "ct state new,established " if stateful else ""
-                    nft_log = 'log prefix "[NRC-ACCEPT] " ' if logging else ""
-                    nft_cmd = (
-                        f"nft add rule inet nrc_filter input "
-                        f"ip saddr {src_ip} {protocol} dport {{ {ports_str} }} "
-                        f"{nft_state}{nft_log}accept"
-                    )
+                        rule_name = f"NRC-Rel-{rule_seq:03d}-{src['label'][:8]}-to-{tgt['label'][:8]}-{presented_port}"
 
-                    # Linux iptables Syntax
-                    ipt_cmd = (
-                        f"iptables -A INPUT -p {protocol} -s {src_ip} -m multiport --dports {ports_str} "
-                        f"{'-m conntrack --ctstate NEW,ESTABLISHED ' if stateful else ''}"
-                        f"-j ACCEPT"
-                    )
+                        # Generate Platform-Native Syntax
+                        if is_redirect:
+                            if is_loopback:
+                                # Loopback Redirect: Intra-host service translation (e.g. WebServer --- 8080:80 ---> WebServer)
+                                win_cmd = (
+                                    f'netsh interface portproxy add v4tov4 listenport={presented_port} listenaddress=127.0.0.1 '
+                                    f'connectport={actual_port} connectaddress=127.0.0.1 & '
+                                    f'netsh advfirewall firewall add rule name="{rule_name}_LOOPBACK" '
+                                    f'dir=in action=allow protocol=TCP localport={presented_port} remoteip=127.0.0.1 enable=yes'
+                                )
+                                nft_cmd = (
+                                    f"nft add table inet nrc_nat ; "
+                                    f"nft add chain inet nrc_nat prerouting {{ type nat hook prerouting priority dstnat \\; }} ; "
+                                    f"nft add rule inet nrc_nat prerouting iifname \"lo\" {protocol} dport {presented_port} redirect to :{actual_port} ; "
+                                    f"nft add rule inet nrc_filter input iifname \"lo\" {protocol} dport {actual_port} accept"
+                                )
+                                ipt_cmd = (
+                                    f"iptables -t nat -A PREROUTING -p {protocol} -i lo --dport {presented_port} -j REDIRECT --to-ports {actual_port} ; "
+                                    f"iptables -A INPUT -p {protocol} -i lo --dport {actual_port} -j ACCEPT"
+                                )
+                                ufw_cmd = (
+                                    f"# [UFW Loopback NAT] -A PREROUTING -p {protocol} -i lo --dport {presented_port} -j REDIRECT --to-port {actual_port} && "
+                                    f"ufw allow in on lo proto {protocol} to 127.0.0.1 port {actual_port} comment '{rule_name}'"
+                                )
+                                pf_cmd = (
+                                    f"rdr on lo0 proto {protocol} from any to any port {presented_port} -> 127.0.0.1 port {actual_port}\n"
+                                    f"pass in quick on lo0 proto {protocol} from any to 127.0.0.1 port {actual_port} keep state"
+                                )
+                                rel_desc = f"Loopback Redirect: {src['label']} --- {presented_port}:{actual_port} ---> {tgt['label']} ({src['label']}:{presented_port} -> {tgt['label']}:{actual_port})"
+                            else:
+                                # Remote Destination Port Forward / DNAT Redirect (e.g. A --- 8080:80 ---> B)
+                                win_cmd = (
+                                    f'netsh interface portproxy add v4tov4 listenport={presented_port} listenaddress=0.0.0.0 '
+                                    f'connectport={actual_port} connectaddress={tgt_ip} & '
+                                    f'netsh advfirewall firewall add rule name="{rule_name}_DNAT" '
+                                    f'dir=in action=allow protocol=TCP localport={presented_port} remoteip={src_ip} enable=yes'
+                                )
+                                nft_cmd = (
+                                    f"nft add table ip nrc_nat ; "
+                                    f"nft add chain ip nrc_nat prerouting {{ type nat hook prerouting priority dstnat \\; }} ; "
+                                    f"nft add rule ip nrc_nat prerouting ip saddr {src_ip} {protocol} dport {presented_port} dnat to {tgt_ip}:{actual_port} ; "
+                                    f"nft add rule inet nrc_filter forward ip saddr {src_ip} ip daddr {tgt_ip} {protocol} dport {actual_port} ct state new,established accept"
+                                )
+                                ipt_cmd = (
+                                    f"iptables -t nat -A PREROUTING -p {protocol} -s {src_ip} --dport {presented_port} -j DNAT --to-destination {tgt_ip}:{actual_port} ; "
+                                    f"iptables -A FORWARD -p {protocol} -s {src_ip} -d {tgt_ip} --dport {actual_port} -m conntrack --ctstate NEW,ESTABLISHED -j ACCEPT"
+                                )
+                                ufw_cmd = (
+                                    f"# [UFW Remote DNAT] -A PREROUTING -p {protocol} -s {src_ip} --dport {presented_port} -j DNAT --to-destination {tgt_ip}:{actual_port} && "
+                                    f"ufw route allow proto {protocol} from {src_ip} to {tgt_ip} port {actual_port} comment '{rule_name}'"
+                                )
+                                pf_cmd = (
+                                    f"rdr on $ext_if proto {protocol} from {src_ip} to any port {presented_port} -> {tgt_ip} port {actual_port}\n"
+                                    f"pass in quick proto {protocol} from {src_ip} to {tgt_ip} port {actual_port} keep state"
+                                )
+                                rel_desc = f"Port Redirect: {src['label']} --- {presented_port}:{actual_port} ---> {tgt['label']} ({src['label']}:{presented_port} -> {tgt['label']}:{actual_port})"
+                        else:
+                            # Direct Port Communication (e.g. A --- 80 ---> B, equivalent to A:80 ---> B:80)
+                            win_cmd = (
+                                f'netsh advfirewall firewall add rule name="{rule_name}" '
+                                f'dir=in action=allow protocol={protocol.upper()} localport={actual_port} '
+                                f'remoteip={src_ip} profile=any enable=yes'
+                            )
+                            if logging:
+                                win_cmd += ' description="NRC-Enforced;Logging=Active"'
 
-                    # Ubuntu/Debian ufw Syntax
-                    ufw_cmd = f"ufw allow from {src_ip} to any port {ports_str} proto {protocol} comment '{rule_name}'"
+                            nft_state = "ct state new,established " if stateful else ""
+                            nft_log = 'log prefix "[NRC-ACCEPT] " ' if logging else ""
+                            nft_cmd = (
+                                f"nft add rule inet nrc_filter input "
+                                f"ip saddr {src_ip} {protocol} dport {{ {actual_port} }} "
+                                f"{nft_state}{nft_log}accept"
+                            )
 
-                    # pf (macOS / pfSense / OPNsense) Syntax
-                    pf_cmd = (
-                        f"pass in quick proto {protocol} from {src_ip} to {tgt_ip} port {{ {ports_str.replace(',', ' ')} }} "
-                        f"{'flags S/SA keep state' if stateful else 'no state'}"
-                    )
+                            ipt_cmd = (
+                                f"iptables -A INPUT -p {protocol} -s {src_ip} --dport {actual_port} "
+                                f"{'-m conntrack --ctstate NEW,ESTABLISHED ' if stateful else ''}"
+                                f"-j ACCEPT"
+                            )
 
-                    chosen_cmd = win_cmd
-                    if provider == "nftables":
-                        chosen_cmd = nft_cmd
-                    elif provider == "iptables":
-                        chosen_cmd = ipt_cmd
-                    elif provider == "ufw":
-                        chosen_cmd = ufw_cmd
-                    elif provider in ["pf", "pfsense", "opnsense"]:
-                        chosen_cmd = pf_cmd
+                            ufw_cmd = f"ufw allow from {src_ip} to any port {actual_port} proto {protocol} comment '{rule_name}'"
 
-                    raw_script_lines.append(f"# Relationship: {src['label']} -> {tgt['label']} ({protocol.upper()} {ports_str})")
-                    if triggered_ports:
-                        raw_script_lines.append(f"# [Triggered/Dynamic Ports: {', '.join(triggered_ports)}]")
-                    raw_script_lines.append(chosen_cmd)
+                            pf_cmd = (
+                                f"pass in quick proto {protocol} from {src_ip} to {tgt_ip} port {actual_port} "
+                                f"{'flags S/SA keep state' if stateful else 'no state'}"
+                            )
+                            rel_desc = f"Direct Communication: {src['label']} --- {actual_port} ---> {tgt['label']} ({src['label']}:{actual_port} -> {tgt['label']}:{actual_port})"
 
-                    rule_entry = {
-                        "id": f"rule_{rule_seq}",
-                        "name": rule_name,
-                        "relationship_id": rel.get("id"),
-                        "source": src["label"],
-                        "source_ip": src_ip,
-                        "target": tgt["label"],
-                        "target_ip": tgt_ip,
-                        "protocol": protocol,
-                        "ports": allowed_ports,
-                        "triggered_ports": triggered_ports,
-                        "direction": "inbound",
-                        "action": "allow",
-                        "native_command": chosen_cmd,
-                        "notes": notes,
-                    }
-                    compiled_rules.append(rule_entry)
-                    rule_seq += 1
+                        # Select provider command
+                        chosen_cmd = win_cmd
+                        if provider == "nftables":
+                            chosen_cmd = nft_cmd
+                        elif provider == "iptables":
+                            chosen_cmd = ipt_cmd
+                        elif provider == "ufw":
+                            chosen_cmd = ufw_cmd
+                        elif provider in ["pf", "pfsense", "opnsense"]:
+                            chosen_cmd = pf_cmd
 
-                    # If bidirectional, synthesize return path rule
-                    if direction == "bidirectional":
-                        rev_rule_name = f"NRC-Rel-{rule_seq:03d}-{tgt['label'][:10]}-to-{src['label'][:10]}"
-                        rev_win_cmd = (
-                            f'netsh advfirewall firewall add rule name="{rev_rule_name}" '
-                            f'dir=in action=allow protocol={protocol.upper()} localport={ports_str} '
-                            f'remoteip={tgt_ip} profile=any enable=yes'
-                        )
-                        raw_script_lines.append(f"# Return Path (Bidirectional Trust): {tgt['label']} -> {src['label']}")
-                        raw_script_lines.append(rev_win_cmd if provider == "windows_firewall" else chosen_cmd)
+                        raw_script_lines.append(f"# {rel_desc}")
+                        if triggered_ports:
+                            raw_script_lines.append(f"# [Triggered/Dynamic Ephemeral Transport Ports: {', '.join(triggered_ports)}]")
+                        raw_script_lines.append(chosen_cmd)
 
-                        compiled_rules.append({
+                        rule_entry = {
                             "id": f"rule_{rule_seq}",
-                            "name": rev_rule_name,
+                            "name": rule_name,
                             "relationship_id": rel.get("id"),
-                            "source": tgt["label"],
-                            "source_ip": tgt_ip,
-                            "target": src["label"],
-                            "target_ip": src_ip,
+                            "source": src["label"],
+                            "source_ip": src_ip,
+                            "target": tgt["label"],
+                            "target_ip": tgt_ip,
                             "protocol": protocol,
-                            "ports": allowed_ports,
+                            "ports": [port_str],
+                            "presented_port": presented_port,
+                            "actual_port": actual_port,
+                            "is_redirect": is_redirect,
+                            "is_loopback": is_loopback,
                             "triggered_ports": triggered_ports,
                             "direction": "inbound",
                             "action": "allow",
-                            "native_command": rev_win_cmd if provider == "windows_firewall" else chosen_cmd,
-                            "notes": f"Bidirectional return trust for {rule_name}",
-                        })
+                            "native_command": chosen_cmd,
+                            "notes": notes,
+                        }
+                        compiled_rules.append(rule_entry)
                         rule_seq += 1
+
+                        # If bidirectional and NOT a self-referential loopback, synthesize return path rule
+                        if direction == "bidirectional" and not is_loopback:
+                            rev_rule_name = f"NRC-Rel-{rule_seq:03d}-{tgt['label'][:8]}-to-{src['label'][:8]}-{actual_port}"
+                            rev_win_cmd = (
+                                f'netsh advfirewall firewall add rule name="{rev_rule_name}" '
+                                f'dir=in action=allow protocol={protocol.upper()} localport={actual_port} '
+                                f'remoteip={tgt_ip} profile=any enable=yes'
+                            )
+                            raw_script_lines.append(f"# Return Path (Bidirectional Trust): {tgt['label']} <=== {actual_port} ===> {src['label']}")
+                            raw_script_lines.append(rev_win_cmd if provider == "windows_firewall" else chosen_cmd)
+
+                            compiled_rules.append({
+                                "id": f"rule_{rule_seq}",
+                                "name": rev_rule_name,
+                                "relationship_id": rel.get("id"),
+                                "source": tgt["label"],
+                                "source_ip": tgt_ip,
+                                "target": src["label"],
+                                "target_ip": src_ip,
+                                "protocol": protocol,
+                                "ports": [port_str],
+                                "presented_port": actual_port,
+                                "actual_port": presented_port,
+                                "is_redirect": is_redirect,
+                                "is_loopback": False,
+                                "triggered_ports": triggered_ports,
+                                "direction": "inbound",
+                                "action": "allow",
+                                "native_command": rev_win_cmd if provider == "windows_firewall" else chosen_cmd,
+                                "notes": f"Bidirectional return trust for {rule_name}",
+                            })
+                            rule_seq += 1
 
                     raw_script_lines.append("")
 
@@ -257,35 +336,53 @@ class AIPolicyAssistant:
         nodes = topology.get("nodes", [])
         groups = topology.get("groups", [])
 
+        # NRC Port Redirect Operator (:) and Redirection Extraction
+        redirect_matches = re.findall(r"\b(\d{1,5})\s*:\s*(\d{1,5})\b", prompt)
+        redirect_phrases = re.findall(r"(?:redirect|forward|map)\s+(?:port\s+)?(\d{1,5})\s+to\s+(?:port\s+)?(\d{1,5})", prompt_lower)
+        
+        redirect_ports = []
+        for p1, p2 in redirect_matches:
+            redirect_ports.append(f"{p1}:{p2}")
+        for p1, p2 in redirect_phrases:
+            pair = f"{p1}:{p2}"
+            if pair not in redirect_ports:
+                redirect_ports.append(pair)
+
+        # Check for loopback keywords
+        is_loopback_intent = any(w in prompt_lower for w in ["loopback", "self", "local redirect", "reverse proxy", "internal redirect", "intra-host"])
+
         # Heuristic Port Detection
         ports = []
-        if "https" in prompt_lower or "443" in prompt_lower:
-            ports.append("443")
-        if "http" in prompt_lower or "80" in prompt_lower:
-            if "80" not in ports and "https" not in prompt_lower:
-                ports.append("80")
-            elif "http and https" in prompt_lower or "80 and 443" in prompt_lower or "web" in prompt_lower:
-                ports.append("80")
-                if "443" not in ports:
-                    ports.append("443")
-        if "ssh" in prompt_lower or "22" in prompt_lower:
-            ports.append("22")
-        if "dns" in prompt_lower or "53" in prompt_lower:
-            ports.append("53")
-        if "rtsp" in prompt_lower or "camera" in prompt_lower or "554" in prompt_lower:
-            ports.append("554")
-        if "postgres" in prompt_lower or "psql" in prompt_lower or "5432" in prompt_lower:
-            ports.append("5432")
-        if "mysql" in prompt_lower or "3306" in prompt_lower:
-            ports.append("3306")
-        if "rdp" in prompt_lower or "3389" in prompt_lower:
-            ports.append("3389")
+        if redirect_ports:
+            ports.extend(redirect_ports)
+        else:
+            if "https" in prompt_lower or "443" in prompt_lower:
+                ports.append("443")
+            if "http" in prompt_lower or "80" in prompt_lower:
+                if "80" not in ports and "https" not in prompt_lower:
+                    ports.append("80")
+                elif "http and https" in prompt_lower or "80 and 443" in prompt_lower or "web" in prompt_lower:
+                    ports.append("80")
+                    if "443" not in ports:
+                        ports.append("443")
+            if "ssh" in prompt_lower or "22" in prompt_lower:
+                ports.append("22")
+            if "dns" in prompt_lower or "53" in prompt_lower:
+                ports.append("53")
+            if "rtsp" in prompt_lower or "camera" in prompt_lower or "554" in prompt_lower:
+                ports.append("554")
+            if "postgres" in prompt_lower or "psql" in prompt_lower or "5432" in prompt_lower:
+                ports.append("5432")
+            if "mysql" in prompt_lower or "3306" in prompt_lower:
+                ports.append("3306")
+            if "rdp" in prompt_lower or "3389" in prompt_lower:
+                ports.append("3389")
 
-        # Explicit numeric port extraction fallback
-        port_match = re.findall(r"\bport\s+(\d+)\b", prompt_lower)
-        for pm in port_match:
-            if pm not in ports:
-                ports.append(pm)
+            # Explicit numeric port extraction fallback
+            port_match = re.findall(r"\bport\s+(\d+)\b", prompt_lower)
+            for pm in port_match:
+                if pm not in ports:
+                    ports.append(pm)
 
         if not ports:
             ports = ["443"]  # Sensible default
@@ -301,6 +398,8 @@ class AIPolicyAssistant:
         direction = "one_way"
         if "bidirectional" in prompt_lower or "mutual" in prompt_lower or "both ways" in prompt_lower:
             direction = "bidirectional"
+        elif "reverse" in prompt_lower or "<---" in prompt or "<--" in prompt:
+            direction = "reverse"
 
         # Source and Target Identification
         source_candidate: Optional[Dict[str, Any]] = None
@@ -313,18 +412,24 @@ class AIPolicyAssistant:
                 if any(w in prompt_lower for w in ["workstation", "dev", "developer", "laptop", "client", "finance"]):
                     if not source_candidate:
                         source_candidate = {"id": g["id"], "label": g["name"], "is_group": True}
-            if any(term in gname for term in ["server", "app", "web", "tier", "cluster"]):
-                if any(w in prompt_lower for w in ["server", "web", "app", "application", "database", "postgres"]):
+            if any(term in gname for term in ["server", "app", "web", "tier", "cluster", "gateway"]):
+                if any(w in prompt_lower for w in ["server", "web", "app", "application", "database", "postgres", "gateway"]):
                     target_candidate = {"id": g["id"], "label": g["name"], "is_group": True}
 
         # Check Nodes Second
         for n in nodes:
             nlabel = n["label"].lower()
+            if any(w in prompt_lower for w in ["gateway", "router", "firewall"]):
+                if "gw" in nlabel or "gateway" in nlabel or "router" in nlabel:
+                    if not source_candidate and ("from gateway" in prompt_lower or "gateway" in prompt_lower):
+                        source_candidate = {"id": n["id"], "label": n["label"], "is_group": False}
+                    elif not target_candidate:
+                        target_candidate = {"id": n["id"], "label": n["label"], "is_group": False}
             if any(w in prompt_lower for w in ["win11", "workstation", "dev", "laptop"]):
                 if "win11" in nlabel or "ws-" in nlabel:
                     if not source_candidate:
                         source_candidate = {"id": n["id"], "label": n["label"], "is_group": False}
-            if any(w in prompt_lower for w in ["web", "nginx", "api"]):
+            if any(w in prompt_lower for w in ["web", "nginx", "api", "proxy"]):
                 if "web" in nlabel or "nginx" in nlabel:
                     target_candidate = {"id": n["id"], "label": n["label"], "is_group": False}
             elif any(w in prompt_lower for w in ["db", "database", "postgres"]):
@@ -334,17 +439,28 @@ class AIPolicyAssistant:
                 if "cam" in nlabel:
                     target_candidate = {"id": n["id"], "label": n["label"], "is_group": False}
 
+        # If loopback intent, source and target are the same node
+        if is_loopback_intent:
+            chosen = target_candidate or source_candidate or (nodes[0] if len(nodes) > 0 else None)
+            if chosen:
+                source_candidate = {"id": chosen["id"], "label": chosen["label"], "is_group": False}
+                target_candidate = {"id": chosen["id"], "label": chosen["label"], "is_group": False}
+
         # Fallback to sensible nodes in topology if prompt is general
         if not source_candidate and len(nodes) > 0:
             source_candidate = {"id": nodes[0]["id"], "label": nodes[0]["label"], "is_group": False}
         if not target_candidate and len(nodes) > 1:
             target_candidate = {"id": nodes[1]["id"], "label": nodes[1]["label"], "is_group": False}
+        elif not target_candidate and len(nodes) > 0:
+            target_candidate = {"id": nodes[0]["id"], "label": nodes[0]["label"], "is_group": False}
+
+        is_self_loop = (source_candidate and target_candidate and source_candidate["id"] == target_candidate["id"])
 
         proposed_relationship = {
-            "source_node_id": source_candidate["id"] if source_candidate else "node_ws_win11",
-            "source_label": source_candidate["label"] if source_candidate else "Workstations",
+            "source_node_id": source_candidate["id"] if source_candidate else "node_srv_web",
+            "source_label": source_candidate["label"] if source_candidate else "WebServer",
             "target_node_id": target_candidate["id"] if target_candidate else "node_srv_web",
-            "target_label": target_candidate["label"] if target_candidate else "Application Tier",
+            "target_label": target_candidate["label"] if target_candidate else "WebServer",
             "direction": direction,
             "protocol": protocol,
             "allowed_ports": ports,
@@ -356,19 +472,37 @@ class AIPolicyAssistant:
             "traffic_status": "expected",
         }
 
-        # Human-readable intent notation summary
-        notation_arrow = "──" + ",".join(ports) + "──>" if direction == "one_way" else "<══" + ",".join(ports) + "══>"
-        intent_visual = f"{proposed_relationship['source_label']} {notation_arrow} {proposed_relationship['target_label']}"
+        # Compact line-based notation summary per specification
+        port_notation = ",".join(ports)
+        if direction == "bidirectional":
+            intent_visual = f"{proposed_relationship['source_label']} <==={port_notation}===> {proposed_relationship['target_label']}"
+        elif direction == "reverse":
+            intent_visual = f"{proposed_relationship['source_label']} <---{port_notation}--- {proposed_relationship['target_label']}"
+        else:
+            intent_visual = f"{proposed_relationship['source_label']} --- {port_notation} ---> {proposed_relationship['target_label']}"
+
+        if is_self_loop:
+            intent_visual += " [Loopback Intra-Host Redirect]"
+
+        has_redirect = any(":" in p for p in ports)
+        if has_redirect:
+            explanation = (
+                f"Generated NRC port redirect policy: {intent_visual}. "
+                f"Requests arriving on presented port are translated to actual service port. "
+                f"Strict zero-trust default deny is enforced for all other traffic."
+            )
+        else:
+            explanation = (
+                f"Generated {direction.replace('_', ' ')} policy permitting {protocol.upper()} communication on port(s) "
+                f"{port_notation} from {proposed_relationship['source_label']} to {proposed_relationship['target_label']}. "
+                f"Strict zero-trust default deny is maintained for all unmentioned ports."
+            )
 
         return {
             "success": True,
             "prompt": prompt,
             "intent_visual": intent_visual,
             "proposed_relationship": proposed_relationship,
-            "confidence_score": 0.94,
-            "explanation": (
-                f"Generated {direction.replace('_', ' ')} policy permitting {protocol.upper()} communication on port(s) "
-                f"{', '.join(ports)} from {proposed_relationship['source_label']} to {proposed_relationship['target_label']}. "
-                f"Strict zero-trust default deny is maintained for all unmentioned ports."
-            ),
+            "confidence_score": 0.98 if has_redirect or is_self_loop else 0.94,
+            "explanation": explanation,
         }

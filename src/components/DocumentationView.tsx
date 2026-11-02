@@ -246,6 +246,57 @@ export const DocumentationView: React.FC<DocumentationViewProps> = ({
                 "If IPv6 addresses show as empty: Click 'IPv6 Neighbor Sweep' to force active neighbor reconciliation; ensure IPv6 protocol is checked in your Windows 11 network adapter properties or enabled in `/etc/sysctl.conf` (`net.ipv6.conf.all.disable_ipv6 = 0`).",
             },
           },
+          {
+            id: "feat-guided-discovery",
+            name: "First-Run Guided Configuration & Multi-Subnet Discovery Wizard",
+            layerBadge: "Automated Onboarding & Governance",
+            protocolBadge: "Multi-Subnet ARP / ICMP / RTSP / Port Sweep",
+            definition:
+              "An automated first-time initialization wizard that executes exclusively the very first time NetFling/NetSentinel runs on a computer, orchestrating multi-subnet discovery, parallel ARP/ICMP sweeps, initial top-port vulnerability audits, and surveillance camera credential indexing while persisting completion state to prevent automatic re-execution on subsequent runs.",
+            technicalDescription: {
+              overview:
+                "Designed to provide instantaneous network awareness on new machine installations without manual configuration. The system checks a dual-layer persistence model before triggering: client-side `localStorage.getItem('netsentinel_first_run_completed')` and server-side SQLite state (`GET /api/first-run/status`). If the computer has already executed first-run setup or if existing inventory devices are detected in SQLite, the wizard remains dormant. When run on a pristine machine, it guides the administrator through 3 stages: 1) Subnet selection across active and secondary network adapters; 2) Live discovery sweep with animated multi-threaded progress tracking; 3) Inventory and camera credential summary. Once completed or dismissed, the machine permanently records completion in both browser storage and the backend database (`POST /api/first-run/complete`).",
+              architectureAndFlow: [
+                "Application loads: `checkFirstRunEligibility()` verifies `localStorage` and queries `/api/first-run/status`.",
+                "If `first_run_completed: true` or `device_count > 0`, the wizard is suppressed on startup.",
+                "If pristine first-run: `GuidedConfigModal` opens with detected subnets (`/api/subnets`).",
+                "Operator selects target CIDRs and optional top-port audit flag, then clicks 'Begin Guided Sweep' (or clicks 'Skip for Now' / 'X' to bypass).",
+                "Backend `POST /api/guided-discovery` sweeps all selected subnets in parallel, catalogs devices into SQLite, probes top infrastructure ports (21, 22, 23, 53, 80, 443, 554 RTSP, 3389, 8000, 8080, 8443, 8899 ONVIF), identifies IP cameras, and sets `first_run_completed = 1` in SQLite `app_settings`.",
+                "Upon completion or dismissal, both local browser cache and backend database are marked complete, guaranteeing the modal will never automatically pop up on reload or future restarts.",
+                "The wizard remains available on demand at any time via the 'Guided Setup' button in the global navigation bar.",
+              ],
+              technicalParameters: [
+                { name: "Single-Run Lock", type: "Dual-Layer (Client LocalStorage + SQLite DB)", description: "Ensures the modal only auto-opens once per computer installation." },
+                { name: "Subnet Targets", type: "Array of CIDR Strings", description: "Configurable multi-subnet scope (e.g. 192.168.1.0/24, 192.168.0.0/24, 10.0.0.0/24)." },
+                { name: "Initial Port Probe Set", type: "Array of TCP Ports [21, 22, 23, 53, 80, 443, 554, 3389, 8000, 8080, 8443, 8899]", description: "Ports audited concurrently on all discovered hosts." },
+                { name: "Persistent Status Endpoint", type: "GET /api/first-run/status & POST /api/first-run/complete", description: "REST endpoints governing machine-level first run flags." },
+              ],
+              algorithmsAndProtocols:
+                "Asynchronous thread pool batching, CIDR normalization regex, dual-key persistence synchronization, and ONVIF/RTSP surveillance fingerprinting.",
+              progressMeterBehavior:
+                "Multi-stage live progress bar: Step 1 (Subnet & Port Scan Selection) -> Step 2 (Live Sweep Progress 0% to 100% with real-time logging terminal) -> Step 3 (Inventory & Camera Defaults Review with Launch Button).",
+            },
+            operationalUse: {
+              threatModelAndUtility:
+                "Establishes a baseline inventory immediately upon software deployment without annoying the user with repetitive wizard popups on every subsequent launch or browser refresh.",
+              stepByStepProcedure: [
+                "Upon first launching NetSentinel on a new computer, the Guided Setup wizard opens automatically.",
+                "Select which subnets you wish to audit (primary LAN, secondary LAN, or custom CIDR).",
+                "Ensure 'Perform Initial Port Scans' is checked for comprehensive vulnerability assessment.",
+                "Click 'Begin Guided Sweep' and monitor the live progress terminal as hosts and open ports are registered.",
+                "Review discovered devices and camera credentials in Step 3, then click 'Launch NetFling Sentinel Command Center'.",
+                "If you close the wizard or click 'Skip for Now', it is permanently marked as completed on this computer and will not open automatically on future runs.",
+                "To run the wizard again at any time, click the 'Guided Setup' compass button in the top navigation header.",
+              ],
+              practicalUseCases: [
+                "Rapid commissioning of NetSentinel on new Windows 11, Linux, or macOS security appliances.",
+                "Instant cataloging of multi-VLAN corporate networks during initial security assessments.",
+                "Ensuring non-intrusive daily operations: administrators are never interrupted on reboots or page refreshes.",
+              ],
+              troubleshootingAndRemediation:
+                "If you need to force the Guided Setup to run automatically again on startup: Open browser developer tools and execute `localStorage.removeItem('netsentinel_first_run_completed')`, or send a `POST /api/first-run/reset` request to clear the database flag.",
+            },
+          },
         ],
       },
       {
