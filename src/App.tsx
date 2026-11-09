@@ -577,6 +577,22 @@ export default function App() {
     }
   };
 
+  const handleFullResetState = async () => {
+    setDevices([]);
+    setAlerts([]);
+    setCameras([]);
+    setPortFindings([]);
+    setTimeline([]);
+    setLatestSpeedTest(null);
+    setRouterAudit(null);
+    await fetchDevices();
+    await fetchStatus();
+    await fetchAlerts();
+    await fetchRouterAudit();
+    await fetchCameras();
+    await fetchTimeline();
+  };
+
   useEffect(() => {
     fetchStatus();
     fetchDevices();
@@ -3246,7 +3262,7 @@ export default function App() {
           {activeTab === "settings" && (
             <SettingsView
               showToast={showToast}
-              onRefreshDevices={fetchDevices}
+              onRefreshDevices={handleFullResetState}
               onOpenGuidedSetup={() => setShowGuidedConfig(true)}
             />
           )}

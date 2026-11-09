@@ -694,7 +694,15 @@ print(json.dumps(result))
       `,
       { clear_canvas, clear_settings }
     );
-    recordSystemLog("WARN", "database", "Database reset to blank starting network over", "db_admin");
+    memoryLogs.length = 0;
+    currentNetworkScanStatus.active = false;
+    currentNetworkScanStatus.devicesFound = 0;
+    currentNetworkScanStatus.progressPercent = 0;
+    currentNetworkScanStatus.stage = "idle";
+    currentPortScanStatus.active = false;
+    currentPortScanStatus.checkedCount = 0;
+    currentPortScanStatus.openCount = 0;
+    recordSystemLog("WARN", "database", "All database tables and devices cleared - starting network over", "db_admin");
     res.json(parseJsonSafe(output));
   } catch (err: any) {
     res.status(500).json({ error: err.message });

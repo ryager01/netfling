@@ -841,90 +841,8 @@ class DatabaseEngine:
     # -------------------------------------------------------------
 
     def seed_default_canvas_if_empty(self) -> None:
-        """Seeds canonical initial canvas nodes, groups, and relationships if empty."""
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) AS cnt FROM canvas_nodes")
-        row = cursor.fetchone()
-        if row and row["cnt"] > 0:
-            return
-
-        now_iso = datetime.now(timezone.utc).isoformat()
-        with conn:
-            # 1. Seed Groups
-            groups = [
-                ("grp_workstations", "Workstations & Endpoints", "#3b82f6", "Corporate employee and developer workstations"),
-                ("grp_app_tier", "Application Servers", "#10b981", "Internal web, application, and microservice hosts"),
-                ("grp_db_tier", "Database Clusters", "#8b5cf6", "Sensitive persistence and relational database servers"),
-                ("grp_surveillance", "Surveillance & CCTV", "#ec4899", "Security cameras and RTSP streaming video recorders"),
-                ("grp_gateways", "Perimeter & Gateways", "#f59e0b", "Default router gateways and edge firewalls"),
-            ]
-            for gid, gname, gcolor, gdesc in groups:
-                conn.execute(
-                    "INSERT OR IGNORE INTO canvas_groups (id, name, color, description, created_at) VALUES (?, ?, ?, ?, ?)",
-                    (gid, gname, gcolor, gdesc, now_iso),
-                )
-
-            # 2. Seed Initial Canvas Nodes
-            nodes = [
-                # ID, MAC, Type, Label, IP/CIDR, X, Y, Status, Group
-                ("node_gw", "02:00:00:00:00:FE", "managed_device", "Core Gateway Router", "192.168.1.1", 140.0, 220.0, "managed", "grp_gateways"),
-                ("node_ws_win11", "02:00:00:00:00:10", "managed_device", "WS-DEV-WIN11", "192.168.1.50", 420.0, 120.0, "managed", "grp_workstations"),
-                ("node_ws_linux", "02:00:00:00:00:11", "managed_device", "WS-ENGINEER-UBUNTU", "192.168.1.51", 420.0, 320.0, "managed", "grp_workstations"),
-                ("node_srv_web", "02:00:00:00:00:20", "managed_device", "SRV-NGINX-API", "192.168.1.100", 780.0, 120.0, "managed", "grp_app_tier"),
-                ("node_srv_db", "02:00:00:00:00:21", "managed_device", "SRV-POSTGRES-PROD", "192.168.1.101", 780.0, 320.0, "managed", "grp_db_tier"),
-                ("node_cam_ptz", "EC:71:DB:5F:10:8C", "unmanaged_device", "CAM-ENTRANCE-PTZ", "192.168.1.144", 780.0, 520.0, "unmanaged", "grp_surveillance"),
-                ("node_internet", "", "internet", "Public Internet / WAN", "0.0.0.0/0", 140.0, 500.0, "warning", "grp_gateways"),
-                ("node_rogue_guest", "5C:E9:31:7E:22:90", "unmanaged_device", "GUEST-UNVERIFIED", "192.168.1.162", 420.0, 520.0, "threat", ""),
-            ]
-            for nid, nmac, ntype, nlabel, nip, nx, ny, nstatus, ngroup in nodes:
-                conn.execute(
-                    """
-                    INSERT OR IGNORE INTO canvas_nodes (
-                        id, device_mac, node_type, label, ip_or_cidr, pos_x, pos_y, status, group_id, metadata, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?)
-                    """,
-                    (nid, nmac, ntype, nlabel, nip, nx, ny, nstatus, ngroup, now_iso, now_iso),
-                )
-
-            # 3. Seed Relationships (Intent)
-            relationships = [
-                # ID, Source, Target, Direction, Proto, Ports, Triggered, Stateful, Logging, IDS, TrafficStatus, AINotes
-                ("rel_ws_web_https", "node_ws_win11", "node_srv_web", "one_way", "tcp", '["80", "443"]', '[]', 1, 1, 0, "expected", "Permitted corporate web dashboard and API access"),
-                ("rel_dev_web_ssh", "node_ws_linux", "node_srv_web", "one_way", "tcp", '["22", "443"]', '[]', 1, 1, 1, "expected", "Authorized developer SSH deployment and HTTPS console"),
-                ("rel_web_db_pg", "node_srv_web", "node_srv_db", "one_way", "tcp", '["5432"]', '[]', 1, 1, 1, "expected", "Application tier to PostgreSQL relational storage"),
-                ("rel_ws_gw_dns", "node_ws_win11", "node_gw", "bidirectional", "udp", '["53"]', '[]', 1, 0, 0, "expected", "Bidirectional internal DNS query resolution"),
-                ("rel_dev_cam_rtsp", "node_ws_linux", "node_cam_ptz", "one_way", "tcp", '["554"]', '["1024-65535"]', 1, 1, 0, "expected", "Surveillance viewing: RTSP control with dynamic ephemeral RTP media return"),
-                ("rel_gw_internet", "node_gw", "node_internet", "one_way", "tcp", '["80", "443"]', '[]', 1, 1, 0, "expected", "Outbound internet web browsing via perimeter router"),
-            ]
-            for rid, rsrc, rtgt, rdir, rproto, rports, rtrig, rstate, rlog, rids, rstat, rnotes in relationships:
-                conn.execute(
-                    """
-                    INSERT OR IGNORE INTO canvas_relationships (
-                        id, source_node_id, target_node_id, direction, protocol, allowed_ports, triggered_ports,
-                        is_stateful, logging_enabled, ids_enabled, schedule, ai_notes, traffic_status, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'always', ?, ?, ?, ?)
-                    """,
-                    (rid, rsrc, rtgt, rdir, rproto, rports, rtrig, rstate, rlog, rids, rnotes, rstat, now_iso, now_iso),
-                )
-
-            # 4. Seed Managed Agents corresponding to managed workstations & servers
-            agents = [
-                ("agent-win11-01", "02:00:00:00:00:10", "WS-DEV-WIN11", "windows", "Windows 11 Enterprise 23H2", "windows_firewall", 98.5, '[{"port": 443, "proto": "tcp", "process": "edge.exe"}]', 6, 0),
-                ("agent-linux-01", "02:00:00:00:00:11", "WS-ENGINEER-UBUNTU", "linux", "Ubuntu 24.04 LTS (Noble)", "nftables", 100.0, '[{"port": 22, "proto": "tcp", "process": "sshd"}]', 8, 0),
-                ("agent-srv-web", "02:00:00:00:00:20", "SRV-NGINX-API", "linux", "Debian GNU/Linux 12", "ufw", 100.0, '[{"port": 80, "proto": "tcp", "process": "nginx"}, {"port": 443, "proto": "tcp", "process": "nginx"}]', 4, 0),
-                ("agent-srv-db", "02:00:00:00:00:21", "SRV-POSTGRES-PROD", "linux", "Ubuntu 22.04 LTS", "iptables", 95.0, '[{"port": 5432, "proto": "tcp", "process": "postgres"}]', 3, 1),
-            ]
-            for aid, amac, ahost, aos, aver, aprovider, ascore, alistener, arulecnt, adiscrep in agents:
-                conn.execute(
-                    """
-                    INSERT OR IGNORE INTO agent_nodes (
-                        agent_id, device_mac, hostname, os_type, os_version, firewall_provider, status,
-                        last_heartbeat, compliance_score, active_listeners, applied_rule_count, discrepancy_count
-                    ) VALUES (?, ?, ?, ?, ?, ?, 'connected', ?, ?, ?, ?, ?)
-                    """,
-                    (aid, amac, ahost, aos, aver, aprovider, now_iso, ascore, alistener, arulecnt, adiscrep),
-                )
+        """No-op: Database is kept clean without inserting sample or mockup data."""
+        pass
 
     def get_canvas_topology(self) -> Dict[str, Any]:
         """Returns full network relationship canvas state (nodes, groups, relationships, agent stats)."""
@@ -1295,41 +1213,43 @@ class DatabaseEngine:
 
     def reset_database_data(self, clear_canvas: bool = True, clear_settings: bool = False) -> Dict[str, Any]:
         """
-        Wipes all network inventory, devices, port scans, alerts, speed tests, system logs,
-        canvas nodes, relationships, and agent nodes to reset the network state back to blank.
+        Wipes ALL tables and devices in the SQLite database to reset the network state completely back to blank.
         """
         conn = self._get_connection()
+        now_iso = datetime.now(timezone.utc).isoformat()
         with conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM devices;")
-            cursor.execute("DELETE FROM port_scans;")
-            cursor.execute("DELETE FROM speed_tests;")
-            cursor.execute("DELETE FROM security_alerts;")
-            cursor.execute("DELETE FROM system_logs;")
-            cursor.execute("DELETE FROM compliance_violations;")
 
-            if clear_canvas:
-                cursor.execute("DELETE FROM canvas_nodes;")
-                cursor.execute("DELETE FROM canvas_groups;")
-                cursor.execute("DELETE FROM canvas_relationships;")
-                cursor.execute("DELETE FROM agent_nodes;")
+            # Dynamically fetch and delete all rows from every table in the SQLite database
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
+            tables = [row["name"] for row in cursor.fetchall()]
 
-            if clear_settings:
-                cursor.execute("DELETE FROM app_settings;")
-            else:
-                now_iso = datetime.now(timezone.utc).isoformat()
-                cursor.execute(
-                    """
-                    INSERT INTO app_settings (key, value, updated_at)
-                    VALUES ('first_run_completed', 'false', ?)
-                    ON CONFLICT(key) DO UPDATE SET value = 'false', updated_at = ?
-                    """,
-                    (now_iso, now_iso),
-                )
+            for table in tables:
+                cursor.execute(f"DELETE FROM {table};")
 
-            cursor.execute("VACUUM;")
+            # Set first_run_completed = false and canvas_cleared = true
+            cursor.execute("""
+                INSERT INTO app_settings (key, value, updated_at)
+                VALUES ('first_run_completed', 'false', ?)
+                ON CONFLICT(key) DO UPDATE SET value = 'false', updated_at = ?
+            """, (now_iso, now_iso))
 
-        return {"success": True, "message": "Database reset to blank state successfully"}
+            cursor.execute("""
+                INSERT INTO app_settings (key, value, updated_at)
+                VALUES ('canvas_cleared', 'true', ?)
+                ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = ?
+            """, (now_iso, now_iso))
+
+        try:
+            conn.execute("VACUUM;")
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "message": f"All {len(tables)} database tables, devices, alerts, port scans, system logs, and canvas nodes reset to 100% blank",
+            "tables_cleared": len(tables),
+        }
 
 
 
