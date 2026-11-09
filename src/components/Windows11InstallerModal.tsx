@@ -163,14 +163,25 @@ export const Windows11InstallerModal: React.FC<Windows11InstallerModalProps> = (
                     Direct batch script launcher for Windows 11 with automatic UAC check, Conda detection, and desktop shortcut generation.
                   </p>
                 </div>
-                <a
-                  href="/api/installer/windows11/bat"
-                  download="install-windows11.bat"
-                  className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-750 text-emerald-300 border border-emerald-500/40 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download install-windows11.bat</span>
-                </a>
+                <div className="flex gap-2">
+                  <a
+                    href="/api/installer/windows11/bat"
+                    download="install-windows11.bat"
+                    className="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-750 text-emerald-300 border border-emerald-500/40 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download install.bat</span>
+                  </a>
+                  <a
+                    href="/api/installer/windows11/shortcut"
+                    download="create-shortcut.bat"
+                    className="py-2 px-3 bg-slate-800 hover:bg-slate-750 text-cyan-300 border border-cyan-500/40 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+                    title="Download create-shortcut.bat to place shortcut on Desktop anytime"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Create Shortcut</span>
+                  </a>
+                </div>
               </div>
             </div>
           </div>

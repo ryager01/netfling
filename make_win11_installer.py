@@ -34,6 +34,7 @@ def build_windows11_package(output_path: Path = OUTPUT_ZIP) -> str:
         # Include primary installer launchers explicitly
         for fname in [
             "install-windows11.bat",
+            "create-shortcut.bat",
             "install.bat",
             "install.ps1",
             "start.bat",

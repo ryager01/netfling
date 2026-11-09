@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { CanvasNode, CanvasRelationship, CanvasGroup } from "../../types/canvas";
 import { CanvasNodeCard } from "./CanvasNodeCard";
 import { CanvasRelationshipEdge } from "./CanvasRelationshipEdge";
-import { ZoomIn, ZoomOut, Maximize2, Move, MousePointer, Plus } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, Move, MousePointer, Plus, Trash2 } from "lucide-react";
 
 interface CanvasViewportProps {
   nodes: CanvasNode[];
@@ -15,6 +15,8 @@ interface CanvasViewportProps {
   onUpdateNodePosition: (id: string, x: number, y: number) => void;
   onCreateRelationship: (sourceId: string, targetId: string) => void;
   onDeleteSelected: () => void;
+  onDeleteNode?: (id: string) => void;
+  onDeleteRelationship?: (id: string) => void;
 }
 
 export const CanvasViewport: React.FC<CanvasViewportProps> = ({
@@ -28,6 +30,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   onUpdateNodePosition,
   onCreateRelationship,
   onDeleteSelected,
+  onDeleteNode,
+  onDeleteRelationship,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -288,6 +292,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
                     onSelectRelationship(r);
                     onSelectNode(null);
                   }}
+                  onDeleteRelationship={onDeleteRelationship}
                   scale={scale}
                 />
               );
@@ -328,6 +333,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
               onStartConnect={handleStartConnect}
               onDragStart={handleNodeDragStart}
               onCreateLoopback={(n) => onCreateRelationship(n.id, n.id)}
+              onDeleteNode={onDeleteNode}
             />
           ))}
         </div>
@@ -364,6 +370,66 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           <Maximize2 className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Floating Action Banner: Selected Device Deletion */}
+      {selectedNode && !connectingSource && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-cyan-500/50 backdrop-blur-md text-slate-200 text-xs px-4 py-2 rounded-xl shadow-2xl flex items-center gap-3 z-40 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+            <span>
+              Device Selected: <strong className="text-white">{selectedNode.label}</strong> ({selectedNode.ip || "No IP"})
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {onDeleteNode && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteNode(selectedNode.id);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1 transition-colors shadow-sm"
+                title={`Delete ${selectedNode.label} from canvas`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Device</span>
+              </button>
+            )}
+            <span className="text-[10px] font-mono text-slate-400 border-l border-slate-700 pl-2">
+              Press <kbd className="px-1 py-0.5 bg-slate-800 rounded border border-slate-700 text-slate-300 font-mono text-[9px]">Del</kbd> to remove
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Action Banner: Selected Connection Deletion */}
+      {selectedRelationship && !selectedNode && !connectingSource && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/95 border border-cyan-500/50 backdrop-blur-md text-slate-200 text-xs px-4 py-2 rounded-xl shadow-2xl flex items-center gap-3 z-40 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+            <span>
+              Connection Policy Selected: <strong className="text-cyan-300 font-mono">{selectedRelationship.ports.join(", ")}</strong> ({selectedRelationship.protocol.toUpperCase()})
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {onDeleteRelationship && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteRelationship(selectedRelationship.id);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center gap-1 transition-colors shadow-sm"
+                title="Delete this connection policy from canvas"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Connection</span>
+              </button>
+            )}
+            <span className="text-[10px] font-mono text-slate-400 border-l border-slate-700 pl-2">
+              Press <kbd className="px-1 py-0.5 bg-slate-800 rounded border border-slate-700 text-slate-300 font-mono text-[9px]">Del</kbd> to remove
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Connecting banner alert */}
       {connectingSource && (

@@ -7,6 +7,7 @@ interface CanvasRelationshipEdgeProps {
   targetNode: CanvasNode;
   isSelected: boolean;
   onSelect: (rel: CanvasRelationship) => void;
+  onDeleteRelationship?: (id: string) => void;
   scale?: number;
   edgeIndex?: number;
   totalParallelEdges?: number;
@@ -18,6 +19,7 @@ export const CanvasRelationshipEdge: React.FC<CanvasRelationshipEdgeProps> = ({
   targetNode,
   isSelected,
   onSelect,
+  onDeleteRelationship,
   edgeIndex = 0,
   totalParallelEdges = 1,
 }) => {
@@ -194,6 +196,23 @@ export const CanvasRelationshipEdge: React.FC<CanvasRelationshipEdgeProps> = ({
           >
             {triggeredLabel ? `[${triggeredLabel}]` : "LOOPBACK REDIRECT"}
           </text>
+
+          {/* Quick Delete Connection Button on Hover/Selection */}
+          {onDeleteRelationship && (
+            <g
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteRelationship(relationship.id);
+              }}
+              transform="translate(56, -18)"
+              className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+            >
+              <circle r="7.5" className="fill-red-600 hover:fill-red-500 stroke-red-400" strokeWidth="1" />
+              <text x="0" y="0.5" className="fill-white font-mono text-[9px] font-bold" textAnchor="middle" dominantBaseline="middle">
+                ✕
+              </text>
+            </g>
+          )}
         </g>
       </g>
     );
@@ -404,6 +423,23 @@ export const CanvasRelationshipEdge: React.FC<CanvasRelationshipEdgeProps> = ({
             REDIRECT (NAT)
           </text>
         ) : null}
+
+        {/* Quick Delete Connection Button on Hover/Selection */}
+        {onDeleteRelationship && (
+          <g
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteRelationship(relationship.id);
+            }}
+            transform={`translate(${badgeWidth / 2 - 8}, ${triggeredLabel ? "-20" : "-12"})`}
+            className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+          >
+            <circle r="7.5" className="fill-red-600 hover:fill-red-500 stroke-red-400" strokeWidth="1" />
+            <text x="0" y="0.5" className="fill-white font-mono text-[9px] font-bold" textAnchor="middle" dominantBaseline="middle">
+              ✕
+            </text>
+          </g>
+        )}
       </g>
     </g>
   );

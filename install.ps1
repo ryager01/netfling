@@ -351,37 +351,68 @@ if (-not $SkipBuild) {
 Write-Host ""
 Write-Host "[7/7] Configuring Windows 11 System Integration & Shortcuts..." -ForegroundColor Yellow
 
-# A. Create Windows 11 Desktop & Start Menu Shortcuts
+# A. Create Windows 11 Desktop & Start Menu Shortcuts across User, OneDrive & Public directories
 if ($CreateShortcuts) {
     try {
-        $wshShell = New-Object -ComObject WScript.Shell
-        $currentDir = Get-Location
-        $targetLauncher = Join-Path -Path $currentDir -ChildPath "start.bat"
+        $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).ProviderPath }
+        $targetLauncher = Join-Path -Path $scriptDir -ChildPath "start.bat"
 
-        # 1. Desktop Shortcut
-        $desktopPath = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Desktop)
-        $desktopShortcutPath = Join-Path -Path $desktopPath -ChildPath "NetSentinel Security.lnk"
-        $shortcut = $wshShell.CreateShortcut($desktopShortcutPath)
-        $shortcut.TargetPath = $targetLauncher
-        $shortcut.WorkingDirectory = $currentDir
-        $shortcut.Description = "NetSentinel Network Security Intelligence Suite (Windows 11)"
-        $shortcut.Save()
-        Write-Host ("      [OK] Windows 11 Desktop Shortcut created: {0}" -f $desktopShortcutPath) -ForegroundColor Green
-
-        # 2. Start Menu Programs Folder Shortcut
-        $startMenuPath = Join-Path -Path ([System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs)) -ChildPath "NetSentinel"
-        if (-not (Test-Path $startMenuPath)) {
-            New-Item -ItemType Directory -Path $startMenuPath -Force | Out-Null
+        # Helper to create shortcut reliably
+        function New-NetSentinelShortcut {
+            param (
+                [string]$ShortcutPath,
+                [string]$TargetBatPath,
+                [string]$WorkingDir
+            )
+            try {
+                $parentDir = Split-Path -Parent $ShortcutPath
+                if (-not (Test-Path $parentDir)) {
+                    New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+                }
+                $wsh = New-Object -ComObject WScript.Shell
+                $sc = $wsh.CreateShortcut($ShortcutPath)
+                $sc.TargetPath = "C:\Windows\System32\cmd.exe"
+                $sc.Arguments = "/c `"$TargetBatPath`""
+                $sc.WorkingDirectory = $WorkingDir
+                $sc.Description = "NetSentinel Network Security Intelligence Suite (Windows 11)"
+                $sc.IconLocation = "%SystemRoot%\System32\shell32.dll, 18"
+                $sc.Save()
+                Write-Host ("      [OK] Created shortcut: {0}" -f $ShortcutPath) -ForegroundColor Green
+            } catch {
+                Write-Warning ("      [!] Could not create shortcut at {0}: {1}" -f $ShortcutPath, $_.Exception.Message)
+            }
         }
-        $startShortcutPath = Join-Path -Path $startMenuPath -ChildPath "NetSentinel.lnk"
-        $startShortcut = $wshShell.CreateShortcut($startShortcutPath)
-        $startShortcut.TargetPath = $targetLauncher
-        $startShortcut.WorkingDirectory = $currentDir
-        $startShortcut.Description = "NetSentinel Network Security Intelligence Suite (Windows 11)"
-        $startShortcut.Save()
-        Write-Host ("      [OK] Windows 11 Start Menu Shortcut created: {0}" -f $startShortcutPath) -ForegroundColor Green
+
+        # 1. Target all potential Windows 11 Desktop locations (User, OneDrive, Public)
+        $desktopLocations = @(
+            (Join-Path -Path $env:USERPROFILE -ChildPath "Desktop"),
+            (Join-Path -Path $env:USERPROFILE -ChildPath "OneDrive\Desktop"),
+            [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Desktop),
+            [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::CommonDesktop),
+            "C:\Users\Public\Desktop"
+        ) | Select-Object -Unique
+
+        foreach ($dPath in $desktopLocations) {
+            if (Test-Path $dPath) {
+                $desktopShortcutPath = Join-Path -Path $dPath -ChildPath "NetSentinel Security.lnk"
+                New-NetSentinelShortcut -ShortcutPath $desktopShortcutPath -TargetBatPath $targetLauncher -WorkingDir $scriptDir
+            }
+        }
+
+        # 2. Target all potential Windows 11 Start Menu Locations
+        $startMenuLocations = @(
+            (Join-Path -Path ([System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs)) -ChildPath "NetSentinel"),
+            (Join-Path -Path ([System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::CommonPrograms)) -ChildPath "NetSentinel"),
+            (Join-Path -Path $env:APPDATA -ChildPath "Microsoft\Windows\Start Menu\Programs\NetSentinel"),
+            "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\NetSentinel"
+        ) | Select-Object -Unique
+
+        foreach ($sMenuPath in $startMenuLocations) {
+            $startShortcutPath = Join-Path -Path $sMenuPath -ChildPath "NetSentinel Security.lnk"
+            New-NetSentinelShortcut -ShortcutPath $startShortcutPath -TargetBatPath $targetLauncher -WorkingDir $scriptDir
+        }
     } catch {
-        Write-Warning ("Could not create Windows shortcuts: {0}" -f $_.Exception.Message)
+        Write-Warning ("Could not complete shortcut configuration: {0}" -f $_.Exception.Message)
     }
 }
 

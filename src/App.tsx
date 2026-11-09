@@ -53,6 +53,7 @@ import {
   Settings as SettingsIcon,
   Cpu,
   Share2,
+  GitBranch,
 } from "lucide-react";
 import { TargetIpSelector } from "./components/TargetIpSelector";
 import { QuarantineView } from "./components/QuarantineView";
@@ -68,6 +69,7 @@ import { DocumentationView } from "./components/DocumentationView";
 import { WifiAnalyzerView } from "./components/WifiAnalyzerView";
 import { LogsView } from "./components/LogsView";
 import { Windows11InstallerModal } from "./components/Windows11InstallerModal";
+import { GitHubUpdateModal } from "./components/GitHubUpdateModal";
 import { NetworkRelationshipCanvas } from "./components/canvas/NetworkRelationshipCanvas";
 
 interface Device {
@@ -414,6 +416,7 @@ export default function App() {
   const [showGuidedConfig, setShowGuidedConfig] = useState<boolean>(false);
   const [showGatewayModal, setShowGatewayModal] = useState<boolean>(false);
   const [showWin11Modal, setShowWin11Modal] = useState<boolean>(false);
+  const [showGitHubUpdateModal, setShowGitHubUpdateModal] = useState<boolean>(false);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -1254,6 +1257,15 @@ export default function App() {
               <div className="bg-blue-400 rounded-[0.5px]" />
             </div>
             <span>Win 11 Installer</span>
+          </button>
+
+          <button
+            onClick={() => setShowGitHubUpdateModal(true)}
+            className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border-purple-500/30 hover:border-purple-500/50 transition-all shrink-0 shadow-sm"
+            title="Check for updates and sync latest version from GitHub"
+          >
+            <GitBranch className="w-3.5 h-3.5 text-purple-400" />
+            <span>v2.4.0 (GitHub Update)</span>
           </button>
 
           <button
@@ -3581,6 +3593,13 @@ export default function App() {
       <Windows11InstallerModal
         isOpen={showWin11Modal}
         onClose={() => setShowWin11Modal(false)}
+        showToast={showToast}
+      />
+
+      {/* GITHUB ONE-CLICK AUTOMATED UPDATER MODAL */}
+      <GitHubUpdateModal
+        isOpen={showGitHubUpdateModal}
+        onClose={() => setShowGitHubUpdateModal(false)}
         showToast={showToast}
       />
     </div>

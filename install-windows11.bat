@@ -23,14 +23,21 @@ echo  ==========================================================================
 echo:
 
 rem 1. Check Windows 11 System Version
+set "WIN_BUILD=0"
 for /f "tokens=4-7 delims=[.] " %%i in ('ver') do (
     set "WIN_BUILD=%%k"
 )
-echo [*] Detected Windows Build: %WIN_BUILD%
-if %WIN_BUILD% LSS 19041 (
-    echo [!] Warning: Windows 11 (Build 22000+) recommended for best performance.
+echo [*] Detected Windows Build: !WIN_BUILD!
+if defined WIN_BUILD (
+    if !WIN_BUILD! GEQ 22000 (
+        echo [*] Windows 11 subsystem verified ^(Build !WIN_BUILD!^).
+    ) else if !WIN_BUILD! GEQ 19041 (
+        echo [*] Windows 10 / Modern Windows subsystem verified ^(Build !WIN_BUILD!^).
+    ) else (
+        echo [!] Warning: Windows 11 ^(Build 22000+^) recommended for best performance.
+    )
 ) else (
-    echo [*] Windows 11 / Modern Windows subsystem verified.
+    echo [*] Windows system verified.
 )
 
 rem 2. Check for Administrative Privileges (to open Windows Defender Firewall and create global shortcuts)
@@ -56,6 +63,11 @@ echo:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" -CreateShortcuts -ConfigureFirewall %*
 set "SCRIPT_EXIT_CODE=%ERRORLEVEL%"
 
+rem Fallback guarantee: Run standalone shortcut creator to ensure shortcut is placed on Desktop
+if exist "%~dp0create-shortcut.bat" (
+    call "%~dp0create-shortcut.bat" >nul 2>&1
+)
+
 echo:
 if "%SCRIPT_EXIT_CODE%"=="0" (
     echo  ============================================================================
@@ -76,7 +88,7 @@ if "%SCRIPT_EXIT_CODE%"=="0" (
     )
 ) else (
     echo  ============================================================================
-    echo     [ERROR] NetSentinel Setup encountered an error (Code: %SCRIPT_EXIT_CODE%).
+    echo     [ERROR] NetSentinel Setup encountered an error ^(Code: !SCRIPT_EXIT_CODE!^).
     echo     If execution failed due to permissions, right-click install-windows11.bat
     echo     and select "Run as Administrator".
     echo  ============================================================================

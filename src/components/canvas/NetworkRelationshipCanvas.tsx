@@ -295,22 +295,33 @@ export const NetworkRelationshipCanvas: React.FC<NetworkRelationshipCanvasProps>
     }
   };
 
-  // Delete Node
-  const handleDeleteSelected = async () => {
-    if (selectedNode) {
-      const id = selectedNode.id;
-      setNodes((prev) => prev.filter((n) => n.id !== id));
-      setRelationships((prev) => prev.filter((r) => r.sourceId !== id && r.targetId !== id));
+  // Delete Node by ID
+  const handleDeleteNode = async (id: string) => {
+    const targetNode = nodes.find((n) => n.id === id);
+    setNodes((prev) => prev.filter((n) => n.id !== id));
+    setRelationships((prev) => prev.filter((r) => r.sourceId !== id && r.targetId !== id));
+    if (selectedNode?.id === id) {
       setSelectedNode(null);
       setIsNodeDrawerOpen(false);
-      showNotification(`Deleted node: ${selectedNode.label}`);
+    }
+    if (selectedRelationship && (selectedRelationship.sourceId === id || selectedRelationship.targetId === id)) {
+      setSelectedRelationship(null);
+      setIsPropertiesOpen(false);
+    }
+    showNotification(`Deleted node: ${targetNode?.label || id}`);
 
-      try {
-        await fetch(`/api/canvas/nodes/${id}`, { method: "DELETE" });
-        fetchCompliance();
-      } catch (err) {
-        console.error("Failed to delete node", err);
-      }
+    try {
+      await fetch(`/api/canvas/nodes/${id}`, { method: "DELETE" });
+      fetchCompliance();
+    } catch (err) {
+      console.error("Failed to delete node", err);
+    }
+  };
+
+  // Delete Node or Relationship currently selected
+  const handleDeleteSelected = async () => {
+    if (selectedNode) {
+      handleDeleteNode(selectedNode.id);
     } else if (selectedRelationship) {
       handleDeleteRelationship(selectedRelationship.id);
     }
@@ -629,6 +640,8 @@ export const NetworkRelationshipCanvas: React.FC<NetworkRelationshipCanvasProps>
             onUpdateNodePosition={handleUpdateNodePosition}
             onCreateRelationship={handleCreateRelationship}
             onDeleteSelected={handleDeleteSelected}
+            onDeleteNode={handleDeleteNode}
+            onDeleteRelationship={handleDeleteRelationship}
           />
         </div>
 

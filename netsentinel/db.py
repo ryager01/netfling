@@ -1293,4 +1293,43 @@ class DatabaseEngine:
             "status": "compliant" if compliance_pct >= 90.0 else "non_compliant",
         }
 
+    def reset_database_data(self, clear_canvas: bool = True, clear_settings: bool = False) -> Dict[str, Any]:
+        """
+        Wipes all network inventory, devices, port scans, alerts, speed tests, system logs,
+        canvas nodes, relationships, and agent nodes to reset the network state back to blank.
+        """
+        conn = self._get_connection()
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM devices;")
+            cursor.execute("DELETE FROM port_scans;")
+            cursor.execute("DELETE FROM speed_tests;")
+            cursor.execute("DELETE FROM security_alerts;")
+            cursor.execute("DELETE FROM system_logs;")
+            cursor.execute("DELETE FROM compliance_violations;")
+
+            if clear_canvas:
+                cursor.execute("DELETE FROM canvas_nodes;")
+                cursor.execute("DELETE FROM canvas_groups;")
+                cursor.execute("DELETE FROM canvas_relationships;")
+                cursor.execute("DELETE FROM agent_nodes;")
+
+            if clear_settings:
+                cursor.execute("DELETE FROM app_settings;")
+            else:
+                now_iso = datetime.now(timezone.utc).isoformat()
+                cursor.execute(
+                    """
+                    INSERT INTO app_settings (key, value, updated_at)
+                    VALUES ('first_run_completed', 'false', ?)
+                    ON CONFLICT(key) DO UPDATE SET value = 'false', updated_at = ?
+                    """,
+                    (now_iso, now_iso),
+                )
+
+            cursor.execute("VACUUM;")
+
+        return {"success": True, "message": "Database reset to blank state successfully"}
+
+
 

@@ -309,8 +309,8 @@ pass in quick proto ${protocol} from ${srcIp} to ${dstIp} port { ${cleanPorts.jo
               <div className="font-mono text-xs text-white bg-slate-900/90 rounded p-2 border border-slate-800 break-all select-all">
                 {lineNotation}
               </div>
-              <p className="text-[9px] text-slate-400 mt-1">
-                Authoritative representation; firewall rules and NAT mappings derive directly from this line.
+              <p className="text-[9px] text-slate-400 mt-1 leading-relaxed">
+                <span className="text-cyan-300 font-semibold">Port Redirect Rule (:):</span> Left number = port on left device ({srcName}); Right number = port on right device ({dstName}). Communication moves in the direction of the arrow.
               </p>
             </div>
           );

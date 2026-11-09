@@ -1793,6 +1793,53 @@ export const DocumentationView: React.FC<DocumentationViewProps> = ({
                 "If AI reports matching nodes missing: Ensure that the referenced devices or groups exist on the canvas with matching names or group tags.",
             },
           },
+          {
+            id: "feat-nrc-port-redirect",
+            name: "NRC Port Redirect Operator (:) & Spatial NAT Notation",
+            layerBadge: "Port Translation / Layer 3-4 NAT",
+            protocolBadge: "PresentedPort:ActualPort / Loopback",
+            definition:
+              "The Port Redirect Operator (:) defines port translation, port forwarding, NAT redirection, and loopback service mapping across directional relationship edges. By spatial definition: the number to the left of the : is the port on the device to the left of the :, and the number to the right of the : is the port on the device to the right of the :, with communication moving in the direction of the arrow.",
+            technicalDescription: {
+              overview:
+                "Port redirects translate visible origin ports to target service ports across single-hop, multi-hop, or self-referential loopback relationships. Syntax rule: LeftNumber is the port on LeftDevice, RightNumber is the port on RightDevice, and the arrow direction governs traffic flow.",
+              architectureAndFlow: [
+                "Forward Redirect (A ── 8080:80 ──> B): Arrow moves left (A) to right (B). Device A communicates with Device B over port 80; when port 8080 on Device A receives traffic, that traffic is redirected to port 80 on Device B.",
+                "Reverse Redirect (A <── 80:8080 ── B): Arrow moves right (B) to left (A). Device B communicates with Device A over port 80; when port 8080 on Device B receives traffic, that traffic is redirected to port 80 on Device A.",
+                "Loopback Self-Redirect (A ── 8080:80 ──> A): Arrow points from A to A. Port 8080 on Device A receives traffic and redirects it to port 80 on Device A itself (Intra-Host / Localhost proxy).",
+                "Direct Relationship (A ── 80 ──> B): Equivalent to A:80 ──> B:80 (same port on both origin and destination).",
+                "Multi-Hop Chaining: Client ── 443:8443 ──> Gateway followed by Gateway ── 8443:8080 ──> App Server.",
+              ],
+              technicalParameters: [
+                { name: "Left Port (Left of :)", type: "Integer (1-65535)", description: "The port assigned to the device positioned to the left of the colon." },
+                { name: "Right Port (Right of :)", type: "Integer (1-65535)", description: "The port assigned to the device positioned to the right of the colon." },
+                { name: "Arrow Vector", type: "Directional Arrow (--->, <---, <===>)", description: "Defines initiating traffic flow and direction of port translation." },
+                { name: "Loopback Flag", type: "Boolean (src.id == tgt.id)", description: "Indicates self-referential intra-host redirect (lo0 / 127.0.0.1)." },
+              ],
+              algorithmsAndProtocols:
+                "Translates into platform-native NAT syntax: Windows `netsh interface portproxy add v4tov4`, Linux `nftables` `dnat to` / `redirect to`, `iptables -j DNAT` / `-j REDIRECT`, FreeBSD/macOS `pf` `rdr on` rules.",
+              progressMeterBehavior:
+                "Visualized on the NRC canvas with dual-port edge badges (e.g. '8080:80 [NAT REDIRECT]') and animated loop arcs for intra-host loopbacks.",
+            },
+            operationalUse: {
+              threatModelAndUtility:
+                "Allows exposing non-standard public ports (e.g., 8080, 8443) while routing traffic securely to internal microservices (80, 8080) without exposing internal port structures.",
+              stepByStepProcedure: [
+                "Select a relationship edge on the canvas or click 'Add Loopback' on a node card.",
+                "In the Properties Drawer under 'Allowed Ports & Redirects', enter the mapping as `PresentedPort:ActualPort` (e.g., `8080:80`).",
+                "Alternatively, use the 'Port Redirect Operator (:)' helper to specify Presented (Origin) and Actual (Target) ports and click '+ Insert'.",
+                "Review the Compact Line Notation (e.g., `WebServer ── 8080:80 ──> WebServer [Loopback]`).",
+                "Click 'Apply Intent' to generate native `netsh portproxy`, `nftables dnat`, or `iptables REDIRECT` rules.",
+              ],
+              practicalUseCases: [
+                "Redirecting public HTTP requests on port 8080 to an internal Nginx container running on port 80.",
+                "Mapping incoming HTTPS traffic on port 443 to a backend reverse proxy listening on port 8443.",
+                "Configuring loopback localhost redirects on standalone servers (`WebServer ── 80:8080 ──> WebServer`).",
+              ],
+              troubleshootingAndRemediation:
+                "If traffic fails to redirect: On Windows, verify IP Helper service (`iphlpsvc`) is running for `netsh portproxy`. On Linux, ensure `net.ipv4.ip_forward = 1` and `net.ipv4.conf.all.route_localnet = 1` are set in sysctl for loopback redirects.",
+            },
+          },
         ],
       },
     ],

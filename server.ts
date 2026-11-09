@@ -675,6 +675,32 @@ print(json.dumps({"success": True, "first_run_completed": False}))
   }
 });
 
+// 3e. Database Wipe & Network Reset (Reset Database to Blank State)
+app.post("/api/database/reset", async (req, res) => {
+  try {
+    const { clear_canvas = true, clear_settings = false } = req.body || {};
+    const output = await runPythonWithStdin(
+      `
+import sys, json
+from netsentinel.db import DatabaseEngine
+
+data = json.load(sys.stdin)
+clear_canvas = bool(data.get("clear_canvas", True))
+clear_settings = bool(data.get("clear_settings", False))
+
+db = DatabaseEngine()
+result = db.reset_database_data(clear_canvas=clear_canvas, clear_settings=clear_settings)
+print(json.dumps(result))
+      `,
+      { clear_canvas, clear_settings }
+    );
+    recordSystemLog("WARN", "database", "Database reset to blank starting network over", "db_admin");
+    res.json(parseJsonSafe(output));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 4. Port Scan Target IP (Enhanced with configurable threads and real-time progress count)
 app.get("/api/portscan/status", (req, res) => {
   res.json(currentPortScanStatus);
@@ -2540,6 +2566,16 @@ app.get("/api/installer/windows11/bat", (req, res) => {
   res.status(404).send("install-windows11.bat not found.");
 });
 
+app.get("/api/installer/windows11/shortcut", (req, res) => {
+  const shortcutBatPath = path.resolve(__dirname, "create-shortcut.bat");
+  if (fs.existsSync(shortcutBatPath)) {
+    res.setHeader("Content-Disposition", 'attachment; filename="create-shortcut.bat"');
+    res.setHeader("Content-Type", "application/x-bat");
+    return res.sendFile(shortcutBatPath);
+  }
+  res.status(404).send("create-shortcut.bat not found.");
+});
+
 app.get("/api/installer/windows11/script", (req, res) => {
   const psPath = path.resolve(__dirname, "install.ps1");
   if (fs.existsSync(psPath)) {
@@ -2557,6 +2593,88 @@ app.get("/api/installer/windows11/start", (req, res) => {
     return res.sendFile(startPath);
   }
   res.status(404).send("start.bat not found.");
+});
+
+// 27. GitHub Auto-Updater & Version Synchronization Endpoints
+app.get("/api/system/version", async (req, res) => {
+  try {
+    const output = await runPythonScript([
+      "-c",
+      "import json; from netsentinel.updater import get_current_version_info; print(json.dumps(get_current_version_info()))",
+    ]);
+    return res.json(JSON.parse(output));
+  } catch (err: any) {
+    return res.json({ current_version: "v2.4.0", repo: "netfling/netsentinel", channel: "stable" });
+  }
+});
+
+app.get("/api/system/update/check", async (req, res) => {
+  try {
+    const targetRepo = (req.query.repo as string) || "netfling/netsentinel";
+    const output = await runPythonScript([
+      "-c",
+      `import json; from netsentinel.updater import check_github_updates; print(json.dumps(check_github_updates(${JSON.stringify(targetRepo)})))`,
+    ]);
+    return res.json(JSON.parse(output));
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/system/update/download", async (req, res) => {
+  try {
+    const targetRepo = req.body?.repo || "netfling/netsentinel";
+    const output = await runPythonScript([
+      "-c",
+      `import json; from netsentinel.updater import download_github_update; print(json.dumps(download_github_update(${JSON.stringify(targetRepo)})))`,
+    ]);
+    return res.json(JSON.parse(output));
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/system/update/apply", async (req, res) => {
+  try {
+    const zipPath = req.body?.zip_path || null;
+    const output = await runPythonScript([
+      "-c",
+      `import json; from netsentinel.updater import apply_github_update; print(json.dumps(apply_github_update(${JSON.stringify(zipPath)})))`,
+    ]);
+    return res.json(JSON.parse(output));
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/installer/github/update-bat", (req, res) => {
+  const p = path.resolve(__dirname, "update.bat");
+  if (fs.existsSync(p)) {
+    res.setHeader("Content-Disposition", 'attachment; filename="update.bat"');
+    res.setHeader("Content-Type", "application/x-bat");
+    return res.sendFile(p);
+  }
+  res.status(404).send("update.bat not found.");
+});
+
+app.get("/api/installer/github/update-ps1", (req, res) => {
+  const p = path.resolve(__dirname, "update.ps1");
+  if (fs.existsSync(p)) {
+    res.setHeader("Content-Disposition", 'attachment; filename="update.ps1"');
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    return res.sendFile(p);
+  }
+  res.status(404).send("update.ps1 not found.");
+});
+
+app.get("/api/installer/github/update-sh", (req, res) => {
+  const p = path.resolve(__dirname, "update.sh");
+  if (fs.existsSync(p)) {
+    res.setHeader("Content-Disposition", 'attachment; filename="update.sh"');
+    res.setHeader("Content-Type", "text/x-shellscript");
+    return res.sendFile(p);
+  }
+  res.status(404).send("update.sh not found.");
 });
 
 // =========================================================================

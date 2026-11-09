@@ -20,6 +20,7 @@ import {
   Plus,
   RotateCcw,
   ArrowRight,
+  Trash2,
 } from "lucide-react";
 
 interface CanvasNodeCardProps {
@@ -29,6 +30,7 @@ interface CanvasNodeCardProps {
   onStartConnect: (node: CanvasNode, e: React.MouseEvent) => void;
   onDragStart: (node: CanvasNode, e: React.MouseEvent) => void;
   onCreateLoopback?: (node: CanvasNode, e: React.MouseEvent) => void;
+  onDeleteNode?: (id: string, e: React.MouseEvent) => void;
 }
 
 export const CanvasNodeCard: React.FC<CanvasNodeCardProps> = ({
@@ -38,6 +40,7 @@ export const CanvasNodeCard: React.FC<CanvasNodeCardProps> = ({
   onStartConnect,
   onDragStart,
   onCreateLoopback,
+  onDeleteNode,
 }) => {
   // Status Colors per prompt:
   // Managed: 🟢 Green
@@ -194,6 +197,20 @@ export const CanvasNodeCard: React.FC<CanvasNodeCardProps> = ({
             )}
           </div>
         </div>
+
+        {/* Hover Delete Device Quick Action */}
+        {onDeleteNode && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteNode(node.id, e);
+            }}
+            className="absolute -top-2.5 -left-2.5 w-6 h-6 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg border border-red-400/40 z-30"
+            title={`Delete ${node.label} from canvas`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         {/* Hover Loopback Port Redirect Initiator (A --- 8080:80 ---> A) */}
         {onCreateLoopback && (

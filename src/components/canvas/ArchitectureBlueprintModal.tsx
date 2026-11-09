@@ -462,6 +462,21 @@ CREATE TABLE canvas_relationships (
                     <code>pass in quick proto tcp from 192.168.1.50 to 192.168.1.100 port 443 flags S/SA keep state</code>
                   </div>
                 </div>
+
+                <div className="p-4 bg-slate-950 rounded-xl border border-indigo-500/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-indigo-300 text-xs block">Port Redirect Operator (:) & Spatial Rule</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-200 border border-indigo-500/30">NAT & Loopback Specification</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed font-mono">
+                    A --- 8080:80 ---&gt; B &nbsp;&nbsp;(Forward: Left device A receives traffic on 8080, redirected to 80 on right device B)<br />
+                    A &lt;--- 80:8080 --- B &nbsp;&nbsp;(Reverse: Right device B receives traffic on 8080, redirected to 80 on left device A)<br />
+                    A --- 8080:80 ---&gt; A &nbsp;&nbsp;(Loopback: Device A port 8080 redirected to port 80 on Device A itself)
+                  </p>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    <strong>Rule:</strong> The number to the <em>left</em> of the colon is the port on the <em>left device</em>. The number to the <em>right</em> of the colon is the port on the <em>right device</em>. Traffic flow is governed by the directional arrow.
+                  </p>
+                </div>
               </div>
             )}
 

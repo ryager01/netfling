@@ -30,6 +30,7 @@ import {
   ArrowRight,
   AlertTriangle,
   Compass,
+  X,
 } from "lucide-react";
 
 interface SettingsViewProps {
@@ -74,6 +75,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   });
   const [backupsList, setBackupsList] = useState<BackupItem[]>([]);
   const [latestBackup, setLatestBackup] = useState<any | null>(null);
+
+  // Database Wipe & Network Reset State
+  const [showResetDbModal, setShowResetDbModal] = useState<boolean>(false);
+  const [isResettingDb, setIsResettingDb] = useState<boolean>(false);
+  const [resetClearCanvas, setResetClearCanvas] = useState<boolean>(true);
+  const [resetClearSettings, setResetClearSettings] = useState<boolean>(false);
+  const [resetConfirmInput, setResetConfirmInput] = useState<string>("");
 
   // Network Adapters state
   const [detectedSubnets, setDetectedSubnets] = useState<any[]>([]);
@@ -322,6 +330,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       },
     }));
     showToast("Thread pool reset to recommended values (Save to apply).");
+  };
+
+  const handleResetDatabase = async () => {
+    setIsResettingDb(true);
+    try {
+      const res = await fetch("/api/database/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clear_canvas: resetClearCanvas,
+          clear_settings: resetClearSettings,
+        }),
+      });
+      if (res.ok) {
+        localStorage.removeItem("netsentinel_first_run_completed");
+        showToast("Database reset to blank! Network inventory & telemetry cleared.");
+        setShowResetDbModal(false);
+        setResetConfirmInput("");
+        if (onRefreshDevices) onRefreshDevices();
+        fetchBackups();
+      } else {
+        const data = await res.json();
+        showToast(`Database reset failed: ${data.error || "Server error"}`);
+      }
+    } catch (err: any) {
+      showToast(`Error resetting database: ${err.message}`);
+    } finally {
+      setIsResettingDb(false);
+    }
   };
 
   if (isLoading) {
@@ -1353,6 +1390,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </span>
                 </div>
               </div>
+
+              {/* DANGER ZONE: RESET DATABASE TO BLANK */}
+              <div className="pt-4 border-t border-slate-800">
+                <div className="bg-red-950/20 border border-red-500/40 rounded-xl p-5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                        <h4 className="text-xs font-bold text-red-200 uppercase tracking-wider">
+                          Danger Zone: Reset Database to Blank
+                        </h4>
+                        <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-red-500/20 text-red-300 font-bold border border-red-500/30">
+                          START NETWORK OVER
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 max-w-2xl">
+                        Purge all discovered network devices, MAC inventory, open port findings, security alerts, and speed test telemetry to reset your network state back to blank.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResetConfirmInput("");
+                        setShowResetDbModal(true);
+                      }}
+                      className="px-4 py-2 text-xs font-semibold text-white bg-red-600/90 hover:bg-red-600 border border-red-500/50 rounded-lg flex items-center gap-2 shadow-sm transition-colors shrink-0 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-white" />
+                      <span>Reset Database to Blank</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -1570,6 +1641,98 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* RESET DATABASE CONFIRMATION MODAL OVERLAY */}
+      {showResetDbModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+          <div className="bg-slate-900 border border-red-500/50 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 relative">
+            <div className="flex items-start justify-between border-b border-red-500/20 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-red-500/20 border border-red-500/40 text-red-400">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Reset Database & Start Network Over</h3>
+                  <p className="text-xs text-red-300">Permanent factory wipe of inventory and telemetry</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowResetDbModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-300 leading-relaxed">
+              <p className="font-semibold text-slate-200">
+                This operation will permanently purge the SQLite database (<code className="text-red-300 font-mono">netsentinel.db</code>) and clear:
+              </p>
+              <ul className="list-disc pl-5 space-y-1 text-slate-300 font-sans">
+                <li>All discovered network devices, MAC addresses, and vendor profiles</li>
+                <li>All open port audit records, banners, and risk benchmarks</li>
+                <li>All security alerts, intruder logs, and telemetry history</li>
+                <li>All speed test bandwidth measurements</li>
+                <li>First-run completion status (enabling a fresh guided discovery sweep)</li>
+              </ul>
+
+              <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 space-y-2.5">
+                <label className="flex items-center gap-2.5 text-xs text-slate-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={resetClearCanvas}
+                    onChange={(e) => setResetClearCanvas(e.target.checked)}
+                    className="rounded border-slate-700 text-red-500 focus:ring-0"
+                  />
+                  <span>Clear Network Relationship Canvas (NRC) nodes & rules</span>
+                </label>
+                <label className="flex items-center gap-2.5 text-xs text-slate-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={resetClearSettings}
+                    onChange={(e) => setResetClearSettings(e.target.checked)}
+                    className="rounded border-slate-700 text-red-500 focus:ring-0"
+                  />
+                  <span className="text-amber-300">Also reset custom SMTP & thread settings to defaults</span>
+                </label>
+              </div>
+
+              <div className="pt-2">
+                <label className="block text-xs text-slate-400 mb-1.5 font-mono">
+                  Type <strong className="text-red-400 select-all">RESET</strong> to confirm:
+                </label>
+                <input
+                  type="text"
+                  value={resetConfirmInput}
+                  onChange={(e) => setResetConfirmInput(e.target.value)}
+                  placeholder="RESET"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-red-500 uppercase"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowResetDbModal(false)}
+                className="px-4 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={resetConfirmInput.trim().toUpperCase() !== "RESET" || isResettingDb}
+                onClick={handleResetDatabase}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:hover:bg-red-600 rounded-lg flex items-center gap-2 shadow-sm transition-all"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${isResettingDb ? "animate-spin" : ""}`} />
+                <span>{isResettingDb ? "Resetting Database..." : "Yes, Reset Database to Blank"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
